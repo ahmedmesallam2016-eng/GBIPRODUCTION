@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام المتابعة المركزية - نسخة Firebase الدائمة</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+        body { 
+            font-family: 'Cairo', sans-serif; 
+            font-size: 16px; 
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ⚠️ استبدل البيانات أدناه ببيانات مشروعك الخاصة من موقع Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyDPtAOvUDDctciRPrAgUPSTzDR1iA_BCbI",
+  authDomain: "gbi-production.firebaseapp.com",
+  projectId: "gbi-production",
+  storageBucket: "gbi-production.firebasestorage.app",
+  messagingSenderId: "574329503287",
+  appId: "1:574329503287:web:ccf6cfba39ef2e1e0d49b2"
+        };
+
+        // تهيئة Firebase وتوصيل قاعدة البيانات
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        const { useState, useEffect } = React;
+
+        function FactoryApp() {
+            // إدارة حساب الدخول
+            const [user, setUser] = useState({ loggedIn: false, role: '', name: '' });
+            const [username, setUsername] = useState('ADMIN');
+            const [password, setPassword] = useState('');
+
+            // قاعدة البيانات المربوطة بالسيرفر
+            const [dataList, setDataList] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            // الحقول المعتمدة 
+            const [newItem, setNewItem] = useState({ 
+                item: 'توله', 
+                karat: '24', 
+                unitWeight: '31.10', 
+                count: '' 
+            });
+
+            // التحكم في نافذة التفاصيل (Modal)
+            const [modal, setModal] = useState({ isOpen: false, title: '', content: [], type: '' });
+
+            // جلب البيانات من Firebase بشكل حي ومباشر (Realtime) بمجرد تسجيل الدخول
+            useEffect(() => {
+                if (user.loggedIn) {
+                    setLoading(true);
+                    const unsubscribe = db.collection("production_data")
+                        .orderBy("id", "desc")
+                        .onSnapshot((snapshot) => {
+                            const items = [];
+                            snapshot.forEach((doc) => {
+                                items.push({ docId: doc.id, ...doc.data() });
+                            });
+                            setDataList(items);
+                            setLoading(false);
+                        }, (error) => {
+                            console.error("خطأ في جلب البيانات من Firebase:", error);
+                            setLoading(false);
+                        });
+
+                    return () => unsubscribe(); // قطع الاتصال عند الخروج لحفظ الاستهلاك
+                }
+            }, [user.loggedIn]);
+
+            // دالة تسجيل الدخول
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (password === '1234') { 
+                    setUser({
+                        loggedIn: true,
+                        role: username === 'ADMIN' ? 'admin' : 'viewer',
+                        name: username
+                    });
+                } else {
+                    alert('كلمة المرور التجريبية الصحيحة هي: 1234');
+                }
+            };
+
+            // ضبط الوزن والعيار تلقائياً حسب نوع الصنف
+            const handleItemChange = (selectedItem) => {
+                const autoKarat = selectedItem === 'توله' ? '24' : '21';
+                let defaultWeight = newItem.unitWeight;
+                
+                if (selectedItem === 'توله') defaultWeight = '31.10';
+                if (selectedItem === 'جنيه') defaultWeight = '8';
+                if (selectedItem === 'نصف جنيه') defaultWeight = '4';
+                if (selectedItem === 'ربع جنيه') defaultWeight = '2';
+
+                setNewItem({
+                    ...newItem,
+                    item: selectedItem,
+                    karat: autoKarat,
+                    unitWeight: defaultWeight
+                });
+            };
+
+            // حساب الوزن الإجمالي تلقائياً
+            const currentUnitWeight = parseFloat(newItem.unitWeight) || 0;
+            const currentCount = parseInt(newItem.count) || 0;
+            const calculatedTotalWeight = currentUnitWeight * currentCount;
+
+            // دالة إضافة تشغيلة جديدة وإرسالها إلى Firebase
+            const handleAddItem = async (e) => {
+                e.preventDefault();
+                const now = new Date();
+                const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+                const record = {
+                    id: Date.now(),
+                    date: formattedDate,
+                    item: newItem.item,
+                    karat: newItem.karat, 
+                    unitWeight: currentUnitWeight,
+                    count: currentCount,
+                    totalWeight: calculatedTotalWeight,
+                    countBarcode: 0, 
+                    status: 'انتظار التسليم 🟡'
+                };
+
+                try {
+                    // الحفظ في مجموعة تسمى production_data داخل Firestore
+                    await db.collection("production_data").add(record);
+                    setNewItem({ item: 'توله', karat: '24', unitWeight: '31.10', count: '' }); 
+                } catch (error) {
+                    alert('فشل حفظ البيانات في السيرفر: ' + error.message);
+                }
+            };
+
+            // دالة التعديل والتسليم للباركود بالعدد وتحديثها في Firebase
+            const handleUpdateBarcode = async (docId, rowId, value) => {
+                const val = parseInt(value) || 0; 
+                const row = dataList.find(r => r.id === rowId);
+                if (!row) return;
+
+                let status = 'انتظار التسليم 🟡';
+                if (val > 0 && val < row.count) status = 'تسليم جزئي 🔵';
+                if (val >= row.count) status = 'تم التسليم بالكامل ✅';
+
+                try {
+                    // تحديث المستند المحدد في Firebase عن طريق معرفه الفريد docId
+                    await db.collection("production_data").doc(docId).update({
+                        countBarcode: val,
+                        status: status
+                    });
+                } catch (error) {
+                    alert('حدث خطأ أثناء التحديث بالسيرفر: ' + error.message);
+                }
+            };
+
+            // الحسابات المجمعة لكروت التقارير العلوية
+            const hallmark24 = dataList.filter(r => r.karat === '24').reduce((sum, r) => sum + r.totalWeight, 0);
+            const hallmark21 = dataList.filter(r => r.karat === '21').reduce((sum, r) => sum + r.totalWeight, 0);
+
+            const barcode24 = dataList.filter(r => r.karat === '24').reduce((sum, r) => sum + (r.unitWeight * r.countBarcode), 0);
+            const barcode21 = dataList.filter(r => r.karat === '21').reduce((sum, r) => sum + (r.unitWeight * r.countBarcode), 0);
+
+            const remaining24 = hallmark24 - barcode24;
+            const remaining21 = hallmark21 - barcode21;
+
+            // فتح تفاصيل الكروت المفلترة
+            const openDetails = (type) => {
+                let filteredData = [];
+                let title = '';
+                if (type === 'hallmark') {
+                    title = 'تقرير تفاصيل حركة المسلم إلى الدمغة';
+                    filteredData = dataList;
+                } else if (type === 'barcode') {
+                    title = 'تقرير تفاصيل حركة الإنتاج التام المسلم للباركود';
+                    filteredData = dataList.filter(r => r.countBarcode > 0);
+                } else if (type === 'remaining') {
+                    title = 'تقرير تفاصيل الشغل المتبقي الحالي بالدمغة (تحت التشغيل)';
+                    filteredData = dataList.filter(r => (r.count - r.countBarcode) > 0);
+                }
+                setModal({ isOpen: true, title, content: filteredData, type });
+            };
+
+            // نظام الطباعة للتقارير الفردية
+            const handlePrintReport = (title, content, type) => {
+                const printWindow = window.open('', '_blank', 'width=1000,height=700');
+                let tableRowsHTML = '';
+
+                if (type === 'hallmark') {
+                    tableRowsHTML = content.map((r, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${r.date}</td>
+                            <td><b>${r.item} ${r.unitWeight} جرام</b></td>
+                            <td>عيار ${r.karat}</td>
+                            <td><b>${r.count}</b></td>
+                            <td><b>${r.totalWeight.toFixed(2)} ج</b></td>
+                        </tr>
+                    `).join('');
+                } else if (type === 'barcode') {
+                    tableRowsHTML = content.map((r, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${r.date}</td>
+                            <td><b>${r.item} ${r.unitWeight} جرام</b></td>
+                            <td>عيار ${r.karat}</td>
+                            <td><b>${r.countBarcode}</b></td>
+                            <td><b>${(r.countBarcode * r.unitWeight).toFixed(2)} ج</b></td>
+                        </tr>
+                    `).join('');
+                } else if (type === 'remaining') {
+                    tableRowsHTML = content.map((r, idx) => {
+                        const remCount = r.count - r.countBarcode;
+                        const remWeight = remCount * r.unitWeight;
+                        return `
+                            <tr>
+                                <td>${idx + 1}</td>
+                                <td>${r.date}</td>
+                                <td><b>${r.item} ${r.unitWeight} جرام</b></td>
+                                <td>عيار ${r.karat}</td>
+                                <td><span style="color:#b45309"><b>${remCount}</b></span></td>
+                                <td><span style="color:#dc2626"><b>${remWeight.toFixed(2)} ج</b></span></td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
+                const tableHeadersHTML = type === 'hallmark' 
+                    ? `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th><th>العدد للدمغة</th><th>إجمالي وزن الدمغة</th>`
+                    : type === 'barcode'
+                    ? `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th><th>العدد بالباركود</th><th>وزن الباركود</th>`
+                    : `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th><th>العدد المتبقي</th><th>الوزن المتبقي</th>`;
+
+                printWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>${title}</title>
+                        <style>
+                            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
+                            html, body { height: 100%; margin: 0; padding: 0; box-sizing: border-box; }
+                            body { 
+                                direction: rtl; font-family: 'Cairo', sans-serif; padding: 40px; background: #fff; color: #333; 
+                                border: 5px double #1e293b; margin: 20px; height: calc(100% - 40px);
+                            }
+                            .header-title { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 5px; color: #1e293b; }
+                            .header-subtitle { text-align: center; font-size: 16px; color: #64748b; margin-bottom: 25px; font-weight: 600; }
+                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                            th, td { border: 1px solid #cbd5e1; padding: 12px; text-align: center; font-size: 15px; }
+                            th { background-color: #1e293b; color: #ffffff; font-weight: bold; }
+                            tr:nth-child(even) { background-color: #f8fafc; }
+                            .print-date { text-align: center; font-size: 14px; color:#475569; margin-bottom: 20px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header-title">${title}</div>
+                        <div class="header-subtitle">نظام الإدارة والمتابعة المركزية للتجهيز</div>
+                        <div class="print-date"><b>تاريخ وتوقيت الطباعة:</b> ${new Date().toLocaleString('ar-EG')}</div>
+                        <table>
+                            <thead><tr>${tableHeadersHTML}</tr></thead>
+                            <tbody>${tableRowsHTML}</tbody>
+                        </table>
+                        <script>window.onload = function() { window.print(); window.close(); }<\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+            };
+
+            // دالة طباعة التقرير الشامل الموحد
+            const handlePrintMasterReport = () => {
+                const printWindow = window.open('', '_blank', 'width=1200,height=850');
+                
+                const masterRows = dataList.map((r, idx) => {
+                    const remCount = r.count - r.countBarcode;
+                    const remWeight = remCount * r.unitWeight;
+                    const barcodeWeight = r.countBarcode * r.unitWeight;
+                    
+                    return `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${r.date}</td>
+                            <td><b>${r.item} ${r.unitWeight} جرام</b></td>
+                            <td>عيار ${r.karat}</td>
+                            
+                            <td class="bg-blue-light"><b>${r.count}</b></td>
+                            <td class="bg-blue-light"><b>${r.totalWeight.toFixed(2)} ج</b></td>
+                            
+                            <td class="bg-emerald-light"><b>${r.countBarcode}</b></td>
+                            <td class="bg-emerald-light"><b>${barcodeWeight.toFixed(2)} ج</b></td>
+                            
+                            <td class="bg-amber-light"><b>${remCount}</b></td>
+                            <td class="bg-amber-light" style="color: #dc2626;"><b>${remWeight.toFixed(2)} ج</b></td>
+                        </tr>
+                    `;
+                }).join('');
+
+                printWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>التقرير الإداري الشامل الموحد</title>
+                        <style>
+                            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
+                            html, body { margin: 0; padding: 0; box-sizing: border-box; }
+                            body { 
+                                direction: rtl; font-family: 'Cairo', sans-serif; padding: 35px; background: #fff; color: #333; 
+                                border: 5px double #1e293b; margin: 20px;
+                            }
+                            .main-title { text-align: center; font-size: 26px; font-weight: bold; color: #1e293b; margin-bottom: 5px; }
+                            .subtitle { text-align: center; font-size: 15px; color: #64748b; margin-bottom: 20px; font-weight: 600; }
+                            .print-date { text-align: center; font-size: 13px; color:#475569; margin-bottom: 25px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px; }
+                            
+                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                            th, td { border: 1px solid #94a3b8; padding: 10px; text-align: center; font-size: 13px; }
+                            
+                            th { background-color: #1e293b; color: #ffffff; font-weight: bold; }
+                            .sub-th { background-color: #334155; color: #ffffff; font-size: 12px; }
+                            
+                            td.bg-blue-light { background-color: #eff6ff; }
+                            td.bg-emerald-light { background-color: #ecfdf5; }
+                            td.bg-amber-light { background-color: #fffbeb; }
+                            
+                            tr:nth-child(even) td:not([class]) { background-color: #f8fafc; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="main-title">التقرير الإداري الشامل الموحد (مصفوفة الحركات والتسويات)</div>
+                        <div class="subtitle">نظام الإدارة والمتابعة المركزية للتجهيز</div>
+                        <div class="print-date"><b>تاريخ وتوقيت التقرير:</b> ${new Date().toLocaleString('ar-EG')}</div>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th colspan="4">البيانات الأساسية للصنف</th>
+                                    <th colspan="2" style="background-color: #2563eb;">1. حركة الدمغة</th>
+                                    <th colspan="2" style="background-color: #059669;">2. حركة الباركود</th>
+                                    <th colspan="2" style="background-color: #d97706;">3. الشغل المتبقي الحالى</th>
+                                </tr>
+                                <tr>
+                                    <th class="sub-th">م</th>
+                                    <th class="sub-th">التاريخ</th>
+                                    <th class="sub-th">الصنف والوزن</th>
+                                    <th class="sub-th">العيار</th>
+                                    
+                                    <th class="sub-th" style="background-color: #3b82f6;">العدد المرسل</th>
+                                    <th class="sub-th" style="background-color: #3b82f6;">الوزن الإجمالي</th>
+                                    
+                                    <th class="sub-th" style="background-color: #10b981;">العدد التام</th>
+                                    <th class="sub-th" style="background-color: #10b981;">وزن التام</th>
+                                    
+                                    <th class="sub-th" style="background-color: #f59e0b;">العدد المتبقي</th>
+                                    <th class="sub-th" style="background-color: #f59e0b;">الوزن المتبقي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${masterRows || '<tr><td colspan="10" style="color:#94a3b8; font-weight:bold; padding: 30px;">لا توجد حركات مسجلة حالياً في النظام لتوليد الجدول الموحد.</td></tr>'}
+                            </tbody>
+                        </table>
+
+                        <script>window.onload = function() { window.print(); window.close(); }<\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+            };
+
+            // --- شاشة الدخول ---
+            if (!user.loggedIn) {
+                return (
+                    <div className="bg-[#0f172a] h-screen flex justify-center items-center px-4">
+                        <div className="bg-[#1e293b] p-8 rounded-xl w-full max-w-md border border-slate-700 shadow-2xl text-center">
+                            <h2 className="text-amber-500 text-2xl font-bold mb-2">GBI</h2>
+                            <p className="text-slate-400 text-sm mb-6">تقارير متابعة الإنتاج </p>
+                            
+                            <form onSubmit={handleLogin} className="text-right">
+                                <div className="mb-4">
+                                    <label className="text-slate-200 block text-base font-semibold mb-2">اختر اسم المستخدم</label>
+                                    <select value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:outline-none focus:border-amber-500 text-center font-bold text-base">
+                                        <option value="ADMIN">ADMIN </option>
+                                        <option value="VIEWER_1">VIEWER 1 (عرض ومتابعة البوكسات فقط)</option>
+                                    </select>
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="text-slate-200 block text-base font-semibold mb-2">كلمة المرور</label>
+                                    <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="اكتب 1234 للتجربة" className="w-full p-3 rounded-lg bg-slate-700 text-white text-center border border-slate-600 focus:outline-none focus:border-amber-500 tracking-widest font-bold text-base" />
+                                </div>
+
+                                <button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 text-white p-3 rounded-lg font-bold transition-all shadow-lg text-center text-lg">دخول للنظام</button>
+                            </form>
+                            <div className="mt-8 pt-4 border-t border-slate-700 text-slate-500 text-xs">
+                                تصميم وتطوير م. أحمد مسلم
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="p-6 max-w-7xl mx-auto text-base">
+                    {/* الهيدر العلوي الذكي */}
+                    <div className="flex flex-col lg:flex-row justify-between items-center border-b border-slate-200 pb-5 mb-8 gap-4 bg-white p-5 rounded-xl shadow-sm">
+                        <div className="text-center lg:text-right">
+                            <h1 className="text-3xl font-bold text-slate-800">نظام متابعة الإنتاج</h1>
+                            <p className="text-base text-slate-500 mt-1">المستخدم: <span className="font-bold text-blue-900 text-lg">{user.name}</span> | الدور: <span className="text-amber-700 font-bold text-lg">{user.role === 'admin' ? 'صلاحية كاملة' : 'تقارير الإنتاج'}</span></p>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center justify-center gap-3">
+                            {user.role === 'admin' && (
+                                <button 
+                                    onClick={handlePrintMasterReport}
+                                    className="bg-slate-900 hover:bg-slate-950 text-white font-bold px-6 py-3 rounded-lg text-base transition-all shadow-md flex items-center gap-2 border border-slate-800"
+                                >
+                                    <span>طباعة تقرير شامل لحركة الإنتاج 📊</span>
+                                </button>
+                            )}
+                            <button onClick={() => setUser({ loggedIn: false, role: '', name: '' })} className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-lg text-base font-bold transition-all shadow-sm">تسجيل الخروج</button>
+                        </div>
+                    </div>
+
+                    {/* مؤشر تحميل البيانات من Firebase */}
+                    {loading && (
+                        <div className="text-center p-4 mb-4 bg-blue-50 text-blue-800 rounded-lg font-bold border border-blue-200 animate-pulse">
+                            🔄 جاري تحديث ومزامنة البيانات مع السيرفر لحظياً...
+                        </div>
+                    )}
+
+                    {/* كروت التقارير الذكية */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-8">
+                        {/* بوكس 1: الدمغة */}
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100/40 p-6 rounded-xl shadow-md border-t-4 border-blue-600 border-x border-b border-slate-300 flex flex-col justify-between text-center transform hover:scale-[1.01] transition-all">
+                            <div>
+                                <p className="text-lg font-bold text-blue-900 mb-4 border-b pb-2 border-blue-200">إجمالي الوزن المسلم للدمغة</p>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-blue-200 shadow-sm">
+                                        <span className="text-sm font-bold text-slate-600">عيار 24 :</span>
+                                        <span className="font-bold text-slate-900 text-lg">{hallmark24.toFixed(2)} ج</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-blue-200 shadow-sm">
+                                        <span className="text-sm font-bold text-slate-600">عيار 21 :</span>
+                                        <span className="font-bold text-slate-900 text-lg">{hallmark21.toFixed(2)} ج</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => openDetails('hallmark')} className="text-blue-900 font-bold text-sm mt-6 hover:text-blue-950 mx-auto w-fit bg-white hover:bg-slate-50 px-5 py-2.5 rounded-lg border border-slate-300 shadow-md transition-all">عرض التفاصيل ⬅️</button>
+                        </div>
+
+                        {/* بوكس 2: الباركود */}
+                        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/40 p-6 rounded-xl shadow-md border-t-4 border-emerald-600 border-x border-b border-slate-300 flex flex-col justify-between text-center transform hover:scale-[1.01] transition-all">
+                            <div>
+                                <p className="text-lg font-bold text-emerald-900 mb-4 border-b pb-2 border-emerald-200">إجمالي الوزن المسلم للباركود</p>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-emerald-200 shadow-sm">
+                                        <span className="text-sm font-bold text-slate-600">عيار 24 :</span>
+                                        <span className="font-bold text-emerald-700 text-lg">{barcode24.toFixed(2)} ج</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-emerald-200 shadow-sm">
+                                        <span className="text-sm font-bold text-slate-600">عيار 21 :</span>
+                                        <span className="font-bold text-emerald-700 text-lg">{barcode21.toFixed(2)} ج</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => openDetails('barcode')} className="text-emerald-800 font-bold text-sm mt-6 hover:text-emerald-900 mx-auto w-fit bg-white hover:bg-slate-50 px-5 py-2.5 rounded-lg border border-slate-300 shadow-md transition-all">عرض التفاصيل ⬅️</button>
+                        </div>
+
+                        {/* بوكس 3: المتبقي */}
+                        <div className="bg-gradient-to-br from-amber-50 to-amber-100/40 p-6 rounded-xl shadow-md border-t-4 border-amber-500 border-x border-b border-slate-300 flex flex-col justify-between text-center transform hover:scale-[1.01] transition-all">
+                            <div>
+                                <p className="text-lg font-bold text-amber-900 mb-4 border-b pb-2 border-amber-200">إجمالي الوزن المتبقي بالدمغة </p>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-amber-200 shadow-sm">
+                                        <span className="text-sm font-bold text-amber-800">عيار 24 :</span>
+                                        <span className="font-bold text-amber-700 text-lg">{remaining24.toFixed(2)} ج</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-amber-200 shadow-sm">
+                                        <span className="text-sm font-bold text-amber-800">عيار 21 :</span>
+                                        <span className="font-bold text-amber-700 text-lg">{remaining21.toFixed(2)} ج</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => openDetails('remaining')} className="text-amber-800 font-bold text-sm mt-6 hover:text-amber-900 mx-auto w-fit bg-white hover:bg-slate-50 px-5 py-2.5 rounded-lg border border-slate-300 shadow-md transition-all">عرض التفاصيل ⬅️</button>
+                        </div>
+                    </div>
+
+                    {/* فورم الإدخال الذكي */}
+                    {user.role === 'admin' && (
+                        <div className="bg-white p-6 rounded-xl shadow-md mb-8 border border-slate-200 text-center">
+                            <h2 className="text-xl font-bold text-slate-800 mb-5 border-b pb-2 text-right">تسجيل تشغيلة (إلى الدمغة)</h2>
+                            <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end text-base">
+                                <div>
+                                    <label className="block text-base font-semibold text-slate-600 mb-1.5 text-center">الصنف</label>
+                                    <select value={newItem.item} onChange={(e) => handleItemChange(e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-blue-600 font-bold text-center text-base">
+                                        <option value="توله">توله</option>
+                                        <option value="جنيه">جنيه</option>
+                                        <option value="نصف جنيه">نصف جنيه</option>
+                                        <option value="ربع جنيه">ربع جنيه</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-base font-semibold text-slate-500 mb-1.5 text-center">العيار </label>
+                                    <div className="w-full p-2.5 bg-amber-50 text-amber-800 font-bold text-center rounded-lg border border-amber-200 text-base">
+                                        عيار {newItem.karat}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-base font-semibold text-slate-600 mb-1.5 text-center">وزن القطعة (جرام)</label>
+                                    <select value={newItem.unitWeight} onChange={(e) => setNewItem({...newItem, unitWeight: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-blue-600 text-center font-bold text-blue-900 text-base">
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="2.5">2.5</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="8">8</option>
+                                        <option value="10">10</option>
+                                        <option value="20">20</option>
+                                        <option value="31.10">31.10</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-base font-semibold text-slate-600 mb-1.5 text-center">العدد</label>
+                                    <input type="number" required min="1" value={newItem.count} onChange={(e) => setNewItem({...newItem, count: e.target.value})} placeholder="0" className="w-full p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 text-center font-bold text-base" />
+                                </div>
+
+                                <div>
+                                    <label className="block text-base font-semibold text-slate-500 mb-1.5 text-center">الوزن الإجمالي</label>
+                                    <div className="w-full p-2.5 bg-slate-100 text-slate-700 font-bold text-center rounded-lg border border-slate-200 text-base">
+                                        {calculatedTotalWeight.toFixed(2)} ج
+                                    </div>
+                                </div>
+
+                                <button type="submit" className="bg-blue-900 hover:bg-blue-950 text-white font-bold p-2.5 rounded-lg transition-all shadow-md text-center w-full text-base py-3"> حفظ </button>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* جدول البيانات الرئيسي */}
+                    {user.role === 'admin' && (
+                        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 transition-all duration-300 mt-6 text-base">
+                            <div className="p-5 border-b border-slate-200 bg-slate-50 text-center">
+                                <h2 className="text-xl font-bold text-slate-800"> بيانات الحركة</h2>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-center border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-800 text-white text-base">
+                                            <th className="p-4 text-center">التاريخ </th>
+                                            <th className="p-4 text-center">الصنف </th>
+                                            <th className="p-4 text-center">العيار</th>
+                                            <th className="p-4 text-center">العدد الكلي</th>
+                                            <th className="p-4 text-center">الوزن الإجمالي</th>
+                                            <th className="p-4 text-center bg-emerald-900 text-white">العدد المسلم للباركود </th>
+                                            <th className="p-4 text-center">حالة التسليم  </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="text-base divide-y divide-slate-200">
+                                        {dataList.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="7" className="p-8 text-center text-slate-400 font-bold">لا توجد بيانات مسجلة حالياً في النظام.</td>
+                                            </tr>
+                                        ) : (
+                                            dataList.map((row) => {
+                                                const isCompleted = row.countBarcode >= row.count;
+                                                return (
+                                                    <tr key={row.id} className="hover:bg-slate-50/80 transition-all text-center">
+                                                        <td className="p-4 text-slate-500 font-mono text-sm text-center">{row.date}</td>
+                                                        <td className="p-4 font-bold text-slate-800 text-center">{row.item} {row.unitWeight} جرام</td>
+                                                        <td className="p-4 text-center">
+                                                            <span className={`inline-block px-3 py-1 rounded font-bold text-sm ${row.karat === '24' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                                عيار {row.karat}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 font-bold text-blue-900 text-center text-lg">{row.count}</td> 
+                                                        <td className="p-4 font-bold text-purple-900 text-center text-lg">{row.totalWeight.toFixed(2)} ج</td>
+                                                        
+                                                        <td className="p-4 bg-emerald-50/30 text-center">
+                                                            {!isCompleted ? (
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="0"
+                                                                        max={row.count}
+                                                                        value={row.countBarcode || ''} 
+                                                                        placeholder="المستلم"
+                                                                        onChange={(e) => handleUpdateBarcode(row.docId, row.id, e.target.value)}
+                                                                        className="p-2 border border-emerald-600 rounded bg-white text-center w-24 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-800 text-base"
+                                                                    />
+                                                                    <span className="text-sm text-slate-500 font-semibold">من {row.count}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="font-bold text-emerald-700 text-lg">تم بالكامل ({row.countBarcode} ق)</span>
+                                                            )}
+                                                        </td>
+                                                        
+                                                        <td className="p-4 text-center">
+                                                            <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold ${
+                                                                isCompleted ? 'bg-green-100 text-green-700' : row.countBarcode > 0 ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                {row.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* نافذة عرض تفاصيل التقارير المنبثقة */}
+                    {modal.isOpen && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col text-base">
+                                <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                    <div className="flex items-center gap-4">
+                                        <h3 className="font-bold text-2xl text-slate-800">{modal.title}</h3>
+                                        {user.role === 'admin' && (
+                                            <button 
+                                                onClick={() => handlePrintReport(modal.title, modal.content, modal.type)}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg shadow transition-all flex items-center gap-2"
+                                            >
+                                                <span>طباعة هذا التقرير منفرداً 🖨️</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <button onClick={() => setModal({ isOpen: false, title: '', content: [], type: '' })} className="text-slate-400 hover:text-slate-600 font-bold bg-slate-200 hover:bg-slate-300 w-9 h-9 rounded-full flex justify-center items-center text-lg">✕</button>
+                                </div>
+                                <div className="p-6 overflow-y-auto">
+                                    {modal.content.length === 0 ? (
+                                        <p className="text-center text-slate-500 py-8 font-bold text-lg">لا توجد حركات مسجلة تندرج تحت هذا التقرير حالياً.</p>
+                                    ) : (
+                                        <table className="w-full text-center border-collapse text-base">
+                                            <thead>
+                                                <tr className="bg-slate-700 text-white text-base border-b border-slate-300">
+                                                    <th className="p-3 text-center">التاريخ</th>
+                                                    <th className="p-3 text-center">الصنف والوزن</th>
+                                                    <th className="p-3 text-center">العيار</th>
+                                                    
+                                                    {modal.type === 'hallmark' && <th className="p-3 text-center">العدد المرسل للدمغة</th>}
+                                                    {modal.type === 'hallmark' && <th className="p-3 text-center">إجمالي وزن الدمغة الحالي</th>}
+                                                    
+                                                    {modal.type === 'barcode' && <th className="p-3 text-center">العدد التام المستلم بالباركود</th>}
+                                                    {modal.type === 'barcode' && <th className="p-3 text-center">إجمالي وزن الإنتاج التام</th>}
+                                                    
+                                                    {modal.type === 'remaining' && <th className="p-3 text-center">العدد المتبقي بالدمغة</th>}
+                                                    {modal.type === 'remaining' && <th className="p-3 text-center">إجمالي الوزن المتبقي</th>}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200">
+                                                {modal.content.map((r, idx) => {
+                                                    const remCount = r.count - r.countBarcode;
+                                                    const remWeight = remCount * r.unitWeight;
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-slate-50 text-center">
+                                                            <td className="p-3 text-slate-500 font-mono text-sm text-center">{r.date}</td>
+                                                            <td className="p-3 font-bold text-slate-800 text-center">{r.item} {r.unitWeight} جرام</td>
+                                                            
+                                                            <td className="p-3 font-bold text-center">
+                                                                <span className={`px-2 py-0.5 rounded text-xs ${r.karat === '24' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                                    عيار {r.karat}
+                                                                </span>
+                                                            </td>
+                                                            
+                                                            {modal.type === 'hallmark' && <td className="p-3 text-blue-900 font-bold text-center text-lg">{r.count}</td>}
+                                                            {modal.type === 'hallmark' && <td className="p-3 text-purple-900 font-bold text-center text-lg">{r.totalWeight.toFixed(2)} ج</td>}
+                                                            
+                                                            {modal.type === 'barcode' && <td className="p-3 text-emerald-700 font-bold text-center text-lg">{r.countBarcode}</td>}
+                                                            {modal.type === 'barcode' && <td className="p-3 text-teal-900 font-bold text-center text-lg">{(r.countBarcode * r.unitWeight).toFixed(2)} ج</td>}
+                                                            
+                                                            {modal.type === 'remaining' && <td className="p-3 text-amber-700 font-bold text-center text-lg">{remCount}</td>}
+                                                            {modal.type === 'remaining' && <td className="p-3 text-red-600 font-bold text-center text-lg">{remWeight.toFixed(2)} ج</td>}
+                                                        </tr>
+                                                    )
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<FactoryApp />);
+    </script>
+</body>
+</html>

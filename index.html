@@ -1,412 +1,1180 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام المتابعة المركزية - نسخة Firebase الدائمة</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>نظام متابعة الإنتاج</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js"></script>
-
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-        body { 
-            font-family: 'Cairo', sans-serif; 
-            font-size: 16px; 
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+        * {
+            font-family: 'Cairo', sans-serif;
+        }
+        body {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+        .modal-overlay {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+        }
+        .stage-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .stage-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.15);
+        }
+        .summary-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            position: relative;
+            overflow: hidden;
+        }
+        .summary-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 10px 10px -5px rgba(15, 23, 42, 0.04);
+            border-color: #cbd5e1;
+        }
+        .border-blue { border-top: 5px solid #2563eb; }
+        .border-indigo { border-top: 5px solid #4f46e5; }
+        .border-emerald { border-top: 5px solid #059669; }
+        .border-purple { border-top: 5px solid #7c3aed; }
+        .border-orange { border-top: 5px solid #ea580c; }
+        .border-red { border-top: 5px solid #dc2626; }
+        .border-stone { border-top: 5px solid #475569; }
+        .border-amber { border-top: 5px solid #d97706; }
+
+        .summary-card .card-title {
+            font-weight: 800;
+            color: #1e293b;
+            text-align: center;
+            margin-bottom: 14px;
+            font-size: 1.05rem;
+            letter-spacing: -0.025em;
+        }
+        .summary-card .karat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 14px;
+            border-radius: 10px;
+            margin: 6px 0;
+            font-weight: 700;
+        }
+        .summary-card .karat-row-24 { background: #f0f9ff; color: #0369a1; border: 1px solid #e0f2fe; }
+        .summary-card .karat-row-21 { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+        .summary-card .karat-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        .summary-card .karat-value {
+            font-weight: 800;
+            font-size: 0.95rem;
+        }
+        .remain-badge {
+            font-size: 11px;
+            color: #64748b;
+            display: block;
+            margin-top: 3px;
+            font-weight: 600;
+        }
+        .fullscreen-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #f8fafc;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 32px;
+        }
+        .fullscreen-modal .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 20px 32px;
+            border-radius: 18px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+            margin-bottom: 28px;
+            border: 1px solid #e2e8f0;
+        }
+        .center-card {
+            max-width: 520px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* تنسيق أزرار اتجاه الطباعة */
+        .orientation-btn {
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .orientation-btn.active {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+            color: #1e40af;
+        }
+
+        @media print {
+            body { background: white !important; }
+            .no-print { display: none !important; }
+            .summary-card, .karat-row, .stage-btn { break-inside: avoid; }
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800">
-
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // ⚠️ استبدل البيانات أدناه ببيانات مشروعك الخاصة من موقع Firebase
+        // ========== Firebase Config ==========
         const firebaseConfig = {
             apiKey: "AIzaSyDPtAOvUDDctciRPrAgUPSTzDR1iA_BCbI",
-  authDomain: "gbi-production.firebaseapp.com",
-  projectId: "gbi-production",
-  storageBucket: "gbi-production.firebasestorage.app",
-  messagingSenderId: "574329503287",
-  appId: "1:574329503287:web:ccf6cfba39ef2e1e0d49b2"
+            authDomain: "gbi-production.firebaseapp.com",
+            projectId: "gbi-production",
+            storageBucket: "gbi-production.firebasestorage.app",
+            messagingSenderId: "574329503287",
+            appId: "1:574329503287:web:ccf6cfba39ef2e1e0d49b2"
         };
 
-        // تهيئة Firebase وتوصيل قاعدة البيانات
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
 
+        // CSS المشترك لطباعة التقرير كـ PDF مع إمكانية تحديد الاتجاه (portrait أو landscape)
+        const getPrintCSS = (orientation = 'portrait') => `
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+            @page {
+                size: A4 ${orientation};
+                margin: 12mm;
+            }
+            * {
+                box-sizing: border-box;
+                font-family: 'Cairo', sans-serif;
+            }
+            html, body {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                direction: rtl;
+                background: #fff;
+                color: #0f172a;
+                padding: 20px;
+            }
+            .page-container {
+                border: 3px double #1e293b;
+                border-radius: 8px;
+                padding: 20px;
+                min-height: 98vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                box-sizing: border-box;
+            }
+            .content-wrap {
+                flex: 1;
+            }
+            h1 {
+                text-align: center;
+                font-size: 24px;
+                color: #0f172a;
+                margin: 0 0 5px 0;
+                font-weight: 800;
+            }
+            .sub {
+                text-align: center;
+                color: #475569;
+                font-size: 13px;
+                margin-bottom: 15px;
+                font-weight: 600;
+            }
+            .print-date {
+                text-align: center;
+                color: #334155;
+                font-size: 12px;
+                margin-bottom: 20px;
+                background: #f1f5f9;
+                padding: 6px;
+                border-radius: 6px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 13px;
+            }
+            th, td {
+                border: 1px solid #cbd5e1;
+                padding: 8px 10px;
+                text-align: center;
+            }
+            th {
+                background: #1e293b;
+                color: #ffffff;
+                font-weight: 700;
+            }
+            tr:nth-child(even) {
+                background: #f8fafc;
+            }
+            .totals {
+                margin-top: 20px;
+                padding: 12px;
+                background: #f1f5f9;
+                border-radius: 8px;
+                display: flex;
+                gap: 30px;
+                justify-content: center;
+                border: 1px solid #cbd5e1;
+                font-weight: 700;
+            }
+            .print-footer {
+                margin-top: 30px;
+                padding-top: 12px;
+                border-top: 2px solid #1e293b;
+                text-align: center;
+                font-size: 13px;
+                color: #0f172a;
+                font-weight: 700;
+                line-height: 1.6;
+            }
+            .print-footer p {
+                margin: 2px 0;
+            }
+            @media print {
+                body { padding: 0; }
+                .page-container { border: 3px double #1e293b !important; }
+                th { background: #1e293b !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+                tr:nth-child(even) { background: #f8fafc !important; -webkit-print-color-adjust: exact; }
+                .totals { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+            }
+        `;
+
+        // ========== التطبيق الرئيسي ==========
         function FactoryApp() {
-            // إدارة حساب الدخول
+            // --- حالة الدخول ---
             const [user, setUser] = useState({ loggedIn: false, role: '', name: '' });
             const [username, setUsername] = useState('ADMIN');
             const [password, setPassword] = useState('');
 
-            // قاعدة البيانات المربوطة بالسيرفر
+            // --- بيانات الإنتاج ---
             const [dataList, setDataList] = useState([]);
             const [loading, setLoading] = useState(true);
 
-            // الحقول المعتمدة 
-            const [newItem, setNewItem] = useState({ 
-                item: 'توله', 
-                karat: '24', 
-                unitWeight: '31.10', 
-                count: '' 
+            // --- نموذج التشغيل ---
+            const [newItem, setNewItem] = useState({
+                item: 'توله',
+                karat: '24',
+                unitWeight: '31.10',
+                count: ''
             });
 
-            // التحكم في نافذة التفاصيل (Modal)
-            const [modal, setModal] = useState({ isOpen: false, title: '', content: [], type: '' });
+            // --- فلاتر التاريخ للإنتاج ---
+            const [filterFrom, setFilterFrom] = useState('');
+            const [filterTo, setFilterTo] = useState('');
 
-            // جلب البيانات من Firebase بشكل حي ومباشر (Realtime) بمجرد تسجيل الدخول
+            // --- نوافذ منبثقة ---
+            const [editModal, setEditModal] = useState({ isOpen: false, record: null });
+            const [moveModal, setMoveModal] = useState({
+                isOpen: false,
+                docId: null,
+                targetField: '',
+                targetLabel: '',
+                sourceField: '',
+                sourceLabel: '',
+                maxMove: 0,
+                currentTarget: 0,
+                unitWeight: 1,
+                available: 0
+            });
+            const [reportModal, setReportModal] = useState({ isOpen: false, title: '', data: [], type: '' });
+            const [inventoryModal, setInventoryModal] = useState(false);
+            const [inventoryDetailPage, setInventoryDetailPage] = useState(false);
+
+            // --- حالة اتجاه الطباعة (جديد) ---
+            const [printOrientation, setPrintOrientation] = useState('portrait');
+
+            // --- بيانات الجرد ---
+            const [inventoryList, setInventoryList] = useState([]);
+            const [inventoryForm, setInventoryForm] = useState({
+                id: null,
+                item: '',
+                karat: '24',
+                weight: ''
+            });
+            const [isEditingInventory, setIsEditingInventory] = useState(false);
+            const [invFilterFrom, setInvFilterFrom] = useState('');
+            const [invFilterTo, setInvFilterTo] = useState('');
+
+            // ========== جلب البيانات ==========
             useEffect(() => {
-                if (user.loggedIn) {
-                    setLoading(true);
-                    const unsubscribe = db.collection("production_data")
-                        .orderBy("id", "desc")
-                        .onSnapshot((snapshot) => {
-                            const items = [];
-                            snapshot.forEach((doc) => {
-                                items.push({ docId: doc.id, ...doc.data() });
-                            });
-                            setDataList(items);
-                            setLoading(false);
-                        }, (error) => {
-                            console.error("خطأ في جلب البيانات من Firebase:", error);
-                            setLoading(false);
-                        });
+                if (!user.loggedIn) return;
 
-                    return () => unsubscribe(); // قطع الاتصال عند الخروج لحفظ الاستهلاك
-                }
+                const unsubProd = db.collection('production_data')
+                    .orderBy('id', 'desc')
+                    .onSnapshot((snap) => {
+                        const items = [];
+                        snap.forEach(d => items.push({ docId: d.id, ...d.data() }));
+                        setDataList(items);
+                        setLoading(false);
+                    }, err => {
+                        console.error(err);
+                        setLoading(false);
+                    });
+
+                const unsubInv = db.collection('inventory_data')
+                    .orderBy('id', 'desc')
+                    .onSnapshot((snap) => {
+                        const inv = [];
+                        snap.forEach(d => inv.push({ docId: d.id, ...d.data() }));
+                        setInventoryList(inv);
+                    });
+
+                return () => {
+                    unsubProd();
+                    unsubInv();
+                };
             }, [user.loggedIn]);
 
-            // دالة تسجيل الدخول
+            // ========== دوال مساعدة ==========
+            const calcTotalWeight = (unit, cnt) => (parseFloat(unit) || 0) * (parseInt(cnt) || 0);
+
+            const getStatus = (row) => {
+                const total = row.count || 0;
+                const opBroken = row.operationalBrokenCount || 0;
+                const hallmark = row.hallmarkCount || 0;
+                const packaging = row.packagingCount || 0;
+                const broken = row.brokenCount || 0;
+                const barcode = row.barcodeCount || 0;
+
+                const netCount = total - opBroken - broken;
+
+                if (opBroken > 0 && total === opBroken) return 'كسر تشغيل كامل 🔧';
+                if ((barcode >= netCount && netCount > 0) || barcode >= total) return 'تم الإنتاج ✅';
+                if (barcode > 0) return 'باركود 🔵';
+                if (packaging >= hallmark && hallmark > 0) return 'تم التغليف 📦';
+                if (packaging > 0) return 'تغليف 🟣';
+                if (hallmark >= total) return 'تم الدمغة 🏷️';
+                if (hallmark > 0) return 'دمغة 🟡';
+                if (opBroken > 0) return 'كسر تشغيل 🔧';
+                return 'تشغيل فقط ⚪';
+            };
+
+            // ========== عمليات Firebase ==========
+            const addProductionRecord = async (record) => {
+                try { await db.collection('production_data').add(record); } catch (e) { alert('فشل الحفظ: ' + e.message); }
+            };
+
+            const updateProductionRecord = async (docId, updates) => {
+                try { await db.collection('production_data').doc(docId).update(updates); } catch (e) { alert('فشل التحديث: ' + e.message); }
+            };
+
+            const deleteProductionRecord = async (docId) => {
+                if (!confirm('هل أنت متأكد من حذف هذا السجل نهائياً؟')) return;
+                try { await db.collection('production_data').doc(docId).delete(); } catch (e) { alert('فشل الحذف: ' + e.message); }
+            };
+
+            // عمليات الجرد
+            const addInventoryRecord = async (data) => {
+                try {
+                    await db.collection('inventory_data').add({
+                        id: Date.now(),
+                        date: new Date().toLocaleString('ar-EG'),
+                        ...data
+                    });
+                } catch (e) { alert('فشل حفظ الجرد: ' + e.message); }
+            };
+
+            const updateInventoryRecord = async (docId, data) => {
+                try {
+                    await db.collection('inventory_data').doc(docId).update(data);
+                } catch (e) { alert('فشل تحديث الجرد: ' + e.message); }
+            };
+
+            const deleteInventoryRecord = async (docId) => {
+                if (!confirm('هل أنت متأكد من حذف هذا الجرد نهائياً؟')) return;
+                try { await db.collection('inventory_data').doc(docId).delete(); } catch (e) { alert('فشل حذف الجرد: ' + e.message); }
+            };
+
+            // ========== معالجات الأحداث ==========
             const handleLogin = (e) => {
                 e.preventDefault();
-                if (password === '1234') { 
+                if (password === '1234') {
                     setUser({
                         loggedIn: true,
                         role: username === 'ADMIN' ? 'admin' : 'viewer',
                         name: username
                     });
                 } else {
-                    alert('كلمة المرور التجريبية الصحيحة هي: 1234');
+                    alert('كلمة المرور الصحيحة هي: 1234');
                 }
             };
 
-            // ضبط الوزن والعيار تلقائياً حسب نوع الصنف
-            const handleItemChange = (selectedItem) => {
-                const autoKarat = selectedItem === 'توله' ? '24' : '21';
-                let defaultWeight = newItem.unitWeight;
-                
-                if (selectedItem === 'توله') defaultWeight = '31.10';
-                if (selectedItem === 'جنيه') defaultWeight = '8';
-                if (selectedItem === 'نصف جنيه') defaultWeight = '4';
-                if (selectedItem === 'ربع جنيه') defaultWeight = '2';
-
-                setNewItem({
-                    ...newItem,
-                    item: selectedItem,
-                    karat: autoKarat,
-                    unitWeight: defaultWeight
-                });
+            const handleItemChange = (val) => {
+                const karat = val === 'توله' ? '24' : '21';
+                let weight = '31.10';
+                if (val === 'جنيه') weight = '8';
+                else if (val === 'نصف جنيه') weight = '4';
+                else if (val === 'ربع جنيه') weight = '2';
+                setNewItem({ ...newItem, item: val, karat, unitWeight: weight });
             };
 
-            // حساب الوزن الإجمالي تلقائياً
-            const currentUnitWeight = parseFloat(newItem.unitWeight) || 0;
-            const currentCount = parseInt(newItem.count) || 0;
-            const calculatedTotalWeight = currentUnitWeight * currentCount;
-
-            // دالة إضافة تشغيلة جديدة وإرسالها إلى Firebase
             const handleAddItem = async (e) => {
                 e.preventDefault();
+                const cnt = parseInt(newItem.count) || 0;
+                if (cnt <= 0) { alert('أدخل عدداً صحيحاً أكبر من صفر'); return; }
                 const now = new Date();
-                const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
                 const record = {
                     id: Date.now(),
-                    date: formattedDate,
+                    date: dateStr,
                     item: newItem.item,
-                    karat: newItem.karat, 
-                    unitWeight: currentUnitWeight,
-                    count: currentCount,
-                    totalWeight: calculatedTotalWeight,
-                    countBarcode: 0, 
-                    status: 'انتظار التسليم 🟡'
+                    karat: newItem.karat,
+                    unitWeight: parseFloat(newItem.unitWeight) || 0,
+                    count: cnt,
+                    totalWeight: calcTotalWeight(newItem.unitWeight, cnt),
+                    operationalBrokenCount: 0,
+                    hallmarkCount: 0,
+                    packagingCount: 0,
+                    brokenCount: 0,
+                    barcodeCount: 0,
+                };
+                await addProductionRecord(record);
+                setNewItem({ item: 'توله', karat: '24', unitWeight: '31.10', count: '' });
+            };
+
+            const openEditModal = (record) => {
+                setEditModal({ isOpen: true, record: { ...record } });
+            };
+
+            const handleEditSave = async () => {
+                const rec = editModal.record;
+                if (!rec) return;
+                const cnt = parseInt(rec.count) || 0;
+                if (cnt <= 0) { alert('العدد الكلي يجب أن يكون أكبر من صفر'); return; }
+
+                const opBroken = parseInt(rec.operationalBrokenCount) || 0;
+                const hallmark = parseInt(rec.hallmarkCount) || 0;
+                const packaging = parseInt(rec.packagingCount) || 0;
+                const broken = parseInt(rec.brokenCount) || 0;
+                const barcode = parseInt(rec.barcodeCount) || 0;
+
+                if (opBroken + hallmark + packaging + broken + barcode > cnt) {
+                    alert('مجموع جميع المراحل لا يمكن أن يتجاوز العدد الكلي');
+                    return;
+                }
+
+                const updates = {
+                    item: rec.item,
+                    karat: rec.karat,
+                    unitWeight: parseFloat(rec.unitWeight) || 0,
+                    count: cnt,
+                    totalWeight: calcTotalWeight(rec.unitWeight, cnt),
+                    operationalBrokenCount: opBroken,
+                    hallmarkCount: hallmark,
+                    packagingCount: packaging,
+                    brokenCount: broken,
+                    barcodeCount: barcode,
+                };
+                await updateProductionRecord(rec.docId, updates);
+                setEditModal({ isOpen: false, record: null });
+            };
+
+            const handleDelete = (docId) => {
+                deleteProductionRecord(docId);
+            };
+
+            // ========== نظام النقل ==========
+            const openMoveModal = (docId, targetField, targetLabel, sourceField, sourceLabel, maxMove, currentTarget, unitWeight, available) => {
+                setMoveModal({
+                    isOpen: true,
+                    docId,
+                    targetField,
+                    targetLabel,
+                    sourceField,
+                    sourceLabel,
+                    maxMove,
+                    currentTarget,
+                    unitWeight,
+                    available
+                });
+                setMoveInput('0');
+            };
+
+            const [moveInput, setMoveInput] = useState('0');
+
+            const handleMove = async () => {
+                const amount = parseInt(moveInput) || 0;
+                if (amount <= 0) { alert('أدخل عدداً صحيحاً أكبر من صفر'); return; }
+                if (amount > moveModal.maxMove) {
+                    alert(`الحد الأقصى المسموح للنقل هو ${moveModal.maxMove}`);
+                    return;
+                }
+
+                const updates = {};
+                const newTarget = (moveModal.currentTarget || 0) + amount;
+                const newSource = (moveModal.available || 0) - amount;
+
+                updates[moveModal.targetField] = newTarget;
+                updates[moveModal.sourceField] = newSource;
+
+                await updateProductionRecord(moveModal.docId, updates);
+                setMoveModal({ isOpen: false, docId: null, targetField: '', targetLabel: '', sourceField: '', sourceLabel: '', maxMove: 0, currentTarget: 0, unitWeight: 1, available: 0 });
+            };
+
+            // ========== فلتر البيانات ==========
+            const filteredData = useMemo(() => {
+                let list = dataList;
+                if (filterFrom) {
+                    const from = new Date(filterFrom);
+                    list = list.filter(r => new Date(r.date) >= from);
+                }
+                if (filterTo) {
+                    const to = new Date(filterTo);
+                    to.setHours(23, 59, 59);
+                    list = list.filter(r => new Date(r.date) <= to);
+                }
+                return list;
+            }, [dataList, filterFrom, filterTo]);
+
+            // ========== إحصائيات البوكسات ==========
+            const stats = useMemo(() => {
+                const init = () => ({ operation: 0, opBroken: 0, hallmark: 0, packaging: 0, broken: 0, barcode: 0 });
+                const stats24 = init();
+                const stats21 = init();
+
+                filteredData.forEach(r => {
+                    const unit = parseFloat(r.unitWeight) || 0;
+                    const total = parseInt(r.count) || 0;
+                    const opBroken = parseInt(r.operationalBrokenCount) || 0;
+                    const hallmark = parseInt(r.hallmarkCount) || 0;
+                    const packaging = parseInt(r.packagingCount) || 0;
+                    const broken = parseInt(r.brokenCount) || 0;
+                    const barcode = parseInt(r.barcodeCount) || 0;
+
+                    const available = total - opBroken - hallmark - packaging - broken - barcode;
+                    const is24 = String(r.karat) === '24';
+                    const targetStats = is24 ? stats24 : stats21;
+
+                    if (available > 0) targetStats.operation += available * unit;
+                    if (opBroken > 0) targetStats.opBroken += opBroken * unit;
+                    if (hallmark > 0) targetStats.hallmark += hallmark * unit;
+                    if (packaging > 0) targetStats.packaging += packaging * unit;
+                    if (broken > 0) targetStats.broken += broken * unit;
+                    if (barcode > 0) targetStats.barcode += barcode * unit;
+                });
+
+                return { stats24, stats21 };
+            }, [filteredData]);
+
+            // ========== فلتر الجرد ==========
+            const filteredInventory = useMemo(() => {
+                let list = inventoryList;
+                if (invFilterFrom) {
+                    const from = new Date(invFilterFrom);
+                    list = list.filter(r => new Date(r.date) >= from);
+                }
+                if (invFilterTo) {
+                    const to = new Date(invFilterTo);
+                    to.setHours(23, 59, 59);
+                    list = list.filter(r => new Date(r.date) <= to);
+                }
+                return list;
+            }, [inventoryList, invFilterFrom, invFilterTo]);
+
+            const inventoryStats = useMemo(() => {
+                let totalWeight24 = 0;
+                let totalWeight21 = 0;
+                filteredInventory.forEach(r => {
+                    let w = parseFloat(r.totalWeight);
+                    if (isNaN(w) || w === 0) {
+                        w = (parseFloat(r.unitWeight) || 0) * (parseInt(r.count) || 0);
+                    }
+                    if (String(r.karat) === '24') totalWeight24 += w;
+                    else if (String(r.karat) === '21') totalWeight21 += w;
+                });
+                return { totalWeight24, totalWeight21 };
+            }, [filteredInventory]);
+
+            // ========== تقارير المراحل ==========
+            const openDetails = (type, title) => {
+                let data = [];
+                switch (type) {
+                    case 'operation':
+                        data = filteredData.filter(r => {
+                            const total = r.count || 0;
+                            const opBroken = r.operationalBrokenCount || 0;
+                            const hallmark = r.hallmarkCount || 0;
+                            const packaging = r.packagingCount || 0;
+                            const broken = r.brokenCount || 0;
+                            const barcode = r.barcodeCount || 0;
+                            return (total - opBroken - hallmark - packaging - broken - barcode) > 0;
+                        });
+                        break;
+                    case 'operationalBroken':
+                        data = filteredData.filter(r => (r.operationalBrokenCount || 0) > 0);
+                        break;
+                    case 'hallmark':
+                        data = filteredData.filter(r => (r.hallmarkCount || 0) > 0);
+                        break;
+                    case 'packaging':
+                        data = filteredData.filter(r => (r.packagingCount || 0) > 0);
+                        break;
+                    case 'broken':
+                        data = filteredData.filter(r => (r.brokenCount || 0) > 0);
+                        break;
+                    case 'barcode':
+                        data = filteredData.filter(r => (r.barcodeCount || 0) > 0);
+                        break;
+                    default:
+                        data = filteredData;
+                }
+                setReportModal({ isOpen: true, title, data, type });
+            };
+
+            // ========== الجرد المتقدم ==========
+            const openInventoryFullscreen = () => {
+                setInventoryModal(true);
+                resetInventoryForm();
+            };
+
+            const resetInventoryForm = () => {
+                setInventoryForm({
+                    id: null,
+                    item: '',
+                    karat: '24',
+                    weight: ''
+                });
+                setIsEditingInventory(false);
+            };
+
+            const handleInventoryItemChange = (val) => {
+                setInventoryForm({ ...inventoryForm, item: val });
+            };
+
+            const handleInventorySubmit = async (e) => {
+                e.preventDefault();
+                const w = parseFloat(inventoryForm.weight);
+                if (isNaN(w) || w <= 0) { alert('الرجاء إدخال وزن صحيح أكبر من صفر'); return; }
+                if (!inventoryForm.item.trim()) { alert('الرجاء كتابة اسم الصنف'); return; }
+
+                const data = {
+                    item: inventoryForm.item.trim(),
+                    karat: inventoryForm.karat,
+                    totalWeight: w,
+                    unitWeight: 0,
+                    count: 0,
                 };
 
-                try {
-                    // الحفظ في مجموعة تسمى production_data داخل Firestore
-                    await db.collection("production_data").add(record);
-                    setNewItem({ item: 'توله', karat: '24', unitWeight: '31.10', count: '' }); 
-                } catch (error) {
-                    alert('فشل حفظ البيانات في السيرفر: ' + error.message);
+                if (isEditingInventory && inventoryForm.id) {
+                    await updateInventoryRecord(inventoryForm.id, data);
+                } else {
+                    await addInventoryRecord(data);
                 }
+                resetInventoryForm();
             };
 
-            // دالة التعديل والتسليم للباركود بالعدد وتحديثها في Firebase
-            const handleUpdateBarcode = async (docId, rowId, value) => {
-                const val = parseInt(value) || 0; 
-                const row = dataList.find(r => r.id === rowId);
-                if (!row) return;
-
-                let status = 'انتظار التسليم 🟡';
-                if (val > 0 && val < row.count) status = 'تسليم جزئي 🔵';
-                if (val >= row.count) status = 'تم التسليم بالكامل ✅';
-
-                try {
-                    // تحديث المستند المحدد في Firebase عن طريق معرفه الفريد docId
-                    await db.collection("production_data").doc(docId).update({
-                        countBarcode: val,
-                        status: status
-                    });
-                } catch (error) {
-                    alert('حدث خطأ أثناء التحديث بالسيرفر: ' + error.message);
+            const handleEditInventory = (inv) => {
+                let w = parseFloat(inv.totalWeight);
+                if (isNaN(w) || w === 0) {
+                    w = (parseFloat(inv.unitWeight) || 0) * (parseInt(inv.count) || 0);
                 }
+                setInventoryForm({
+                    id: inv.docId,
+                    item: inv.item || '',
+                    karat: inv.karat || '24',
+                    weight: w ? w.toString() : ''
+                });
+                setIsEditingInventory(true);
             };
 
-            // الحسابات المجمعة لكروت التقارير العلوية
-            const hallmark24 = dataList.filter(r => r.karat === '24').reduce((sum, r) => sum + r.totalWeight, 0);
-            const hallmark21 = dataList.filter(r => r.karat === '21').reduce((sum, r) => sum + r.totalWeight, 0);
-
-            const barcode24 = dataList.filter(r => r.karat === '24').reduce((sum, r) => sum + (r.unitWeight * r.countBarcode), 0);
-            const barcode21 = dataList.filter(r => r.karat === '21').reduce((sum, r) => sum + (r.unitWeight * r.countBarcode), 0);
-
-            const remaining24 = hallmark24 - barcode24;
-            const remaining21 = hallmark21 - barcode21;
-
-            // فتح تفاصيل الكروت المفلترة
-            const openDetails = (type) => {
-                let filteredData = [];
-                let title = '';
-                if (type === 'hallmark') {
-                    title = 'تقرير تفاصيل حركة المسلم إلى الدمغة';
-                    filteredData = dataList;
-                } else if (type === 'barcode') {
-                    title = 'تقرير تفاصيل حركة الإنتاج التام المسلم للباركود';
-                    filteredData = dataList.filter(r => r.countBarcode > 0);
-                } else if (type === 'remaining') {
-                    title = 'تقرير تفاصيل الشغل المتبقي الحالي بالدمغة (تحت التشغيل)';
-                    filteredData = dataList.filter(r => (r.count - r.countBarcode) > 0);
-                }
-                setModal({ isOpen: true, title, content: filteredData, type });
+            const handleDeleteInventory = (docId) => {
+                deleteInventoryRecord(docId);
             };
 
-            // نظام الطباعة للتقارير الفردية
-            const handlePrintReport = (title, content, type) => {
-                const printWindow = window.open('', '_blank', 'width=1000,height=700');
-                let tableRowsHTML = '';
+            const openInventoryDetailPage = () => {
+                setInventoryDetailPage(true);
+            };
 
-                if (type === 'hallmark') {
-                    tableRowsHTML = content.map((r, idx) => `
+            // ========== دوال الطباعة الفعليّة (تستخدم printOrientation من الحالة) ==========
+
+            // 1. طباعة جميع الحركات (الجدول التفصيلي فقط)
+            const executeComprehensivePrint = () => {
+                const orientation = printOrientation;
+                if (filteredData.length === 0) { alert('لا توجد بيانات للطباعة'); return; }
+
+                let totCount = 0;
+                let totWeight = 0;
+                let totOpBroken = 0;
+                let totHallmark = 0;
+                let totPackaging = 0;
+                let totBroken = 0;
+                let totBarcode = 0;
+
+                let rows = '';
+                filteredData.forEach((row) => {
+                    const total = row.count || 0;
+                    const totalW = parseFloat(row.totalWeight) || 0;
+                    const opBroken = row.operationalBrokenCount || 0;
+                    const hallmark = row.hallmarkCount || 0;
+                    const packaging = row.packagingCount || 0;
+                    const broken = row.brokenCount || 0;
+                    const barcode = row.barcodeCount || 0;
+
+                    totCount += total;
+                    totWeight += totalW;
+                    totOpBroken += opBroken;
+                    totHallmark += hallmark;
+                    totPackaging += packaging;
+                    totBroken += broken;
+                    totBarcode += barcode;
+
+                    const status = getStatus(row);
+
+                    rows += `
                         <tr>
-                            <td>${idx + 1}</td>
-                            <td>${r.date}</td>
-                            <td><b>${r.item} ${r.unitWeight} جرام</b></td>
-                            <td>عيار ${r.karat}</td>
-                            <td><b>${r.count}</b></td>
-                            <td><b>${r.totalWeight.toFixed(2)} ج</b></td>
-                        </tr>
-                    `).join('');
-                } else if (type === 'barcode') {
-                    tableRowsHTML = content.map((r, idx) => `
-                        <tr>
-                            <td>${idx + 1}</td>
-                            <td>${r.date}</td>
-                            <td><b>${r.item} ${r.unitWeight} جرام</b></td>
-                            <td>عيار ${r.karat}</td>
-                            <td><b>${r.countBarcode}</b></td>
-                            <td><b>${(r.countBarcode * r.unitWeight).toFixed(2)} ج</b></td>
-                        </tr>
-                    `).join('');
-                } else if (type === 'remaining') {
-                    tableRowsHTML = content.map((r, idx) => {
-                        const remCount = r.count - r.countBarcode;
-                        const remWeight = remCount * r.unitWeight;
-                        return `
-                            <tr>
-                                <td>${idx + 1}</td>
-                                <td>${r.date}</td>
-                                <td><b>${r.item} ${r.unitWeight} جرام</b></td>
-                                <td>عيار ${r.karat}</td>
-                                <td><span style="color:#b45309"><b>${remCount}</b></span></td>
-                                <td><span style="color:#dc2626"><b>${remWeight.toFixed(2)} ج</b></span></td>
-                            </tr>
-                        `;
-                    }).join('');
-                }
-
-                const tableHeadersHTML = type === 'hallmark' 
-                    ? `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th><th>العدد للدمغة</th><th>إجمالي وزن الدمغة</th>`
-                    : type === 'barcode'
-                    ? `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th><th>العدد بالباركود</th><th>وزن الباركود</th>`
-                    : `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th><th>العدد المتبقي</th><th>الوزن المتبقي</th>`;
-
-                printWindow.document.write(`
-                    <html>
-                    <head>
-                        <title>${title}</title>
-                        <style>
-                            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
-                            html, body { height: 100%; margin: 0; padding: 0; box-sizing: border-box; }
-                            body { 
-                                direction: rtl; font-family: 'Cairo', sans-serif; padding: 40px; background: #fff; color: #333; 
-                                border: 5px double #1e293b; margin: 20px; height: calc(100% - 40px);
-                            }
-                            .header-title { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 5px; color: #1e293b; }
-                            .header-subtitle { text-align: center; font-size: 16px; color: #64748b; margin-bottom: 25px; font-weight: 600; }
-                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                            th, td { border: 1px solid #cbd5e1; padding: 12px; text-align: center; font-size: 15px; }
-                            th { background-color: #1e293b; color: #ffffff; font-weight: bold; }
-                            tr:nth-child(even) { background-color: #f8fafc; }
-                            .print-date { text-align: center; font-size: 14px; color:#475569; margin-bottom: 20px; }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="header-title">${title}</div>
-                        <div class="header-subtitle">نظام الإدارة والمتابعة المركزية للتجهيز</div>
-                        <div class="print-date"><b>تاريخ وتوقيت الطباعة:</b> ${new Date().toLocaleString('ar-EG')}</div>
-                        <table>
-                            <thead><tr>${tableHeadersHTML}</tr></thead>
-                            <tbody>${tableRowsHTML}</tbody>
-                        </table>
-                        <script>window.onload = function() { window.print(); window.close(); }<\/script>
-                    </body>
-                    </html>
-                `);
-                printWindow.document.close();
-            };
-
-            // دالة طباعة التقرير الشامل الموحد
-            const handlePrintMasterReport = () => {
-                const printWindow = window.open('', '_blank', 'width=1200,height=850');
-                
-                const masterRows = dataList.map((r, idx) => {
-                    const remCount = r.count - r.countBarcode;
-                    const remWeight = remCount * r.unitWeight;
-                    const barcodeWeight = r.countBarcode * r.unitWeight;
-                    
-                    return `
-                        <tr>
-                            <td>${idx + 1}</td>
-                            <td>${r.date}</td>
-                            <td><b>${r.item} ${r.unitWeight} جرام</b></td>
-                            <td>عيار ${r.karat}</td>
-                            
-                            <td class="bg-blue-light"><b>${r.count}</b></td>
-                            <td class="bg-blue-light"><b>${r.totalWeight.toFixed(2)} ج</b></td>
-                            
-                            <td class="bg-emerald-light"><b>${r.countBarcode}</b></td>
-                            <td class="bg-emerald-light"><b>${barcodeWeight.toFixed(2)} ج</b></td>
-                            
-                            <td class="bg-amber-light"><b>${remCount}</b></td>
-                            <td class="bg-amber-light" style="color: #dc2626;"><b>${remWeight.toFixed(2)} ج</b></td>
+                            <td>${row.date || ''}</td>
+                            <td><strong>${row.item} ${row.unitWeight}ج</strong></td>
+                            <td>عيار ${row.karat}</td>
+                            <td><strong>${total}</strong></td>
+                            <td><strong>${totalW.toFixed(2)}ج</strong></td>
+                            <td>${opBroken}</td>
+                            <td>${hallmark}</td>
+                            <td>${packaging}</td>
+                            <td>${broken}</td>
+                            <td>${barcode}</td>
+                            <td><span style="font-weight:700; font-size:11px;">${status}</span></td>
                         </tr>
                     `;
-                }).join('');
+                });
 
-                printWindow.document.write(`
+                const win = window.open('', '_blank', 'width=1200,height=850');
+
+                win.document.write(`
                     <html>
                     <head>
-                        <title>التقرير الإداري الشامل الموحد</title>
-                        <style>
-                            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
-                            html, body { margin: 0; padding: 0; box-sizing: border-box; }
-                            body { 
-                                direction: rtl; font-family: 'Cairo', sans-serif; padding: 35px; background: #fff; color: #333; 
-                                border: 5px double #1e293b; margin: 20px;
-                            }
-                            .main-title { text-align: center; font-size: 26px; font-weight: bold; color: #1e293b; margin-bottom: 5px; }
-                            .subtitle { text-align: center; font-size: 15px; color: #64748b; margin-bottom: 20px; font-weight: 600; }
-                            .print-date { text-align: center; font-size: 13px; color:#475569; margin-bottom: 25px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px; }
-                            
-                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                            th, td { border: 1px solid #94a3b8; padding: 10px; text-align: center; font-size: 13px; }
-                            
-                            th { background-color: #1e293b; color: #ffffff; font-weight: bold; }
-                            .sub-th { background-color: #334155; color: #ffffff; font-size: 12px; }
-                            
-                            td.bg-blue-light { background-color: #eff6ff; }
-                            td.bg-emerald-light { background-color: #ecfdf5; }
-                            td.bg-amber-light { background-color: #fffbeb; }
-                            
-                            tr:nth-child(even) td:not([class]) { background-color: #f8fafc; }
-                        </style>
+                        <title>جميع الحركات PDF</title>
+                        <style>${getPrintCSS(orientation)}</style>
                     </head>
                     <body>
-                        <div class="main-title">التقرير الإداري الشامل الموحد (مصفوفة الحركات والتسويات)</div>
-                        <div class="subtitle">نظام الإدارة والمتابعة المركزية للتجهيز</div>
-                        <div class="print-date"><b>تاريخ وتوقيت التقرير:</b> ${new Date().toLocaleString('ar-EG')}</div>
-                        
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th colspan="4">البيانات الأساسية للصنف</th>
-                                    <th colspan="2" style="background-color: #2563eb;">1. حركة الدمغة</th>
-                                    <th colspan="2" style="background-color: #059669;">2. حركة الباركود</th>
-                                    <th colspan="2" style="background-color: #d97706;">3. الشغل المتبقي الحالى</th>
-                                </tr>
-                                <tr>
-                                    <th class="sub-th">م</th>
-                                    <th class="sub-th">التاريخ</th>
-                                    <th class="sub-th">الصنف والوزن</th>
-                                    <th class="sub-th">العيار</th>
-                                    
-                                    <th class="sub-th" style="background-color: #3b82f6;">العدد المرسل</th>
-                                    <th class="sub-th" style="background-color: #3b82f6;">الوزن الإجمالي</th>
-                                    
-                                    <th class="sub-th" style="background-color: #10b981;">العدد التام</th>
-                                    <th class="sub-th" style="background-color: #10b981;">وزن التام</th>
-                                    
-                                    <th class="sub-th" style="background-color: #f59e0b;">العدد المتبقي</th>
-                                    <th class="sub-th" style="background-color: #f59e0b;">الوزن المتبقي</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${masterRows || '<tr><td colspan="10" style="color:#94a3b8; font-weight:bold; padding: 30px;">لا توجد حركات مسجلة حالياً في النظام لتوليد الجدول الموحد.</td></tr>'}
-                            </tbody>
-                        </table>
+                        <div class="page-container">
+                            <div class="content-wrap">
+                                <h1>جميع الحركات - نظام WIP</h1>
+                                <div class="sub">نظام حركة المواد والخصم التلقائي</div>
+                                <div class="print-date">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')} | عدد السجلات: ${filteredData.length}</div>
 
-                        <script>window.onload = function() { window.print(); window.close(); }<\/script>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>التاريخ</th>
+                                            <th>الصنف</th>
+                                            <th>العيار</th>
+                                            <th>العدد الكلي</th>
+                                            <th>الوزن الكلي</th>
+                                            <th>كسر تشغيل</th>
+                                            <th>الدمغة</th>
+                                            <th>التغليف</th>
+                                            <th>كسر دمغة</th>
+                                            <th>الباركود</th>
+                                            <th>الحالة</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${rows}
+                                        <tr style="background:#e2e8f0; font-weight:800;">
+                                            <td colspan="3" style="text-align:right; padding-right:15px;">الإجمالي الشامل:</td>
+                                            <td>${totCount}</td>
+                                            <td>${totWeight.toFixed(2)}ج</td>
+                                            <td>${totOpBroken}</td>
+                                            <td>${totHallmark}</td>
+                                            <td>${totPackaging}</td>
+                                            <td>${totBroken}</td>
+                                            <td>${totBarcode}</td>
+                                            <td>-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="print-footer">
+                                <p>برنامج متابعة إنتاج GBI</p>
+                                <p>إعداد وتصميم م/ أحمد مسلم</p>
+                                <p>Ahmed.Musalam@newegygold.com - 01201816294</p>
+                            </div>
+                        </div>
+
+                        <script>
+                            window.onload = function() {
+                                window.print();
+                                window.close();
+                            };
+                        <\/script>
                     </body>
                     </html>
                 `);
-                printWindow.document.close();
+                win.document.close();
             };
 
-            // --- شاشة الدخول ---
+            // 2. طباعة جميع التقارير الشاملة (إحصائيات + جدول تفصيلي)
+            const executeAllReportsPrint = () => {
+                const orientation = printOrientation;
+                if (filteredData.length === 0) { alert('لا توجد بيانات للطباعة'); return; }
+
+                const { stats24, stats21 } = stats;
+
+                // بناء جدول الإحصائيات
+                const statsRows = `
+                    <tr>
+                        <td><strong>التشغيل</strong></td>
+                        <td>${stats24.operation.toFixed(2)} ج</td>
+                        <td>${stats21.operation.toFixed(2)} ج</td>
+                    </tr>
+                    <tr>
+                        <td><strong>الدمغة</strong></td>
+                        <td>${stats24.hallmark.toFixed(2)} ج</td>
+                        <td>${stats21.hallmark.toFixed(2)} ج</td>
+                    </tr>
+                    <tr>
+                        <td><strong>التغليف</strong></td>
+                        <td>${stats24.packaging.toFixed(2)} ج</td>
+                        <td>${stats21.packaging.toFixed(2)} ج</td>
+                    </tr>
+                    <tr>
+                        <td><strong>الباركود</strong></td>
+                        <td>${stats24.barcode.toFixed(2)} ج</td>
+                        <td>${stats21.barcode.toFixed(2)} ج</td>
+                    </tr>
+                    <tr>
+                        <td><strong>كسر تشغيل</strong></td>
+                        <td>${stats24.opBroken.toFixed(2)} ج</td>
+                        <td>${stats21.opBroken.toFixed(2)} ج</td>
+                    </tr>
+                    <tr>
+                        <td><strong>كسر دمغة</strong></td>
+                        <td>${stats24.broken.toFixed(2)} ج</td>
+                        <td>${stats21.broken.toFixed(2)} ج</td>
+                    </tr>
+                    <tr style="background:#e2e8f0; font-weight:800;">
+                        <td><strong>إجمالي الكسر</strong></td>
+                        <td>${(stats24.opBroken + stats24.broken).toFixed(2)} ج</td>
+                        <td>${(stats21.opBroken + stats21.broken).toFixed(2)} ج</td>
+                    </tr>
+                `;
+
+                // الجدول التفصيلي (نفس الجدول من executeComprehensivePrint)
+                let totCount = 0;
+                let totWeight = 0;
+                let totOpBroken = 0;
+                let totHallmark = 0;
+                let totPackaging = 0;
+                let totBroken = 0;
+                let totBarcode = 0;
+
+                let detailRows = '';
+                filteredData.forEach((row) => {
+                    const total = row.count || 0;
+                    const totalW = parseFloat(row.totalWeight) || 0;
+                    const opBroken = row.operationalBrokenCount || 0;
+                    const hallmark = row.hallmarkCount || 0;
+                    const packaging = row.packagingCount || 0;
+                    const broken = row.brokenCount || 0;
+                    const barcode = row.barcodeCount || 0;
+
+                    totCount += total;
+                    totWeight += totalW;
+                    totOpBroken += opBroken;
+                    totHallmark += hallmark;
+                    totPackaging += packaging;
+                    totBroken += broken;
+                    totBarcode += barcode;
+
+                    const status = getStatus(row);
+
+                    detailRows += `
+                        <tr>
+                            <td>${row.date || ''}</td>
+                            <td><strong>${row.item} ${row.unitWeight}ج</strong></td>
+                            <td>عيار ${row.karat}</td>
+                            <td><strong>${total}</strong></td>
+                            <td><strong>${totalW.toFixed(2)}ج</strong></td>
+                            <td>${opBroken}</td>
+                            <td>${hallmark}</td>
+                            <td>${packaging}</td>
+                            <td>${broken}</td>
+                            <td>${barcode}</td>
+                            <td><span style="font-weight:700; font-size:11px;">${status}</span></td>
+                        </tr>
+                    `;
+                });
+
+                const win = window.open('', '_blank', 'width=1200,height=850');
+
+                win.document.write(`
+                    <html>
+                    <head>
+                        <title>تقرير شامل - جميع المراحل PDF</title>
+                        <style>${getPrintCSS(orientation)}</style>
+                    </head>
+                    <body>
+                        <div class="page-container">
+                            <div class="content-wrap">
+                                <h1>📊 تقرير شامل - جميع مراحل الإنتاج</h1>
+                                <div class="sub">نظام متابعة الإنتاج</div>
+                                <div class="print-date">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</div>
+
+                                <h2 style="font-size:18px; margin:20px 0 10px; text-align:center;">إحصائيات المراحل حسب العيار</h2>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>المرحلة</th>
+                                            <th>عيار 24</th>
+                                            <th>عيار 21</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${statsRows}
+                                    </tbody>
+                                </table>
+
+                                <h2 style="font-size:18px; margin:30px 0 10px; text-align:center;">تفاصيل جميع الحركات</h2>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>التاريخ</th>
+                                            <th>الصنف</th>
+                                            <th>العيار</th>
+                                            <th>العدد الكلي</th>
+                                            <th>الوزن الكلي</th>
+                                            <th>كسر تشغيل</th>
+                                            <th>الدمغة</th>
+                                            <th>التغليف</th>
+                                            <th>كسر دمغة</th>
+                                            <th>الباركود</th>
+                                            <th>الحالة</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${detailRows}
+                                        <tr style="background:#e2e8f0; font-weight:800;">
+                                            <td colspan="3" style="text-align:right; padding-right:15px;">الإجمالي الشامل:</td>
+                                            <td>${totCount}</td>
+                                            <td>${totWeight.toFixed(2)}ج</td>
+                                            <td>${totOpBroken}</td>
+                                            <td>${totHallmark}</td>
+                                            <td>${totPackaging}</td>
+                                            <td>${totBroken}</td>
+                                            <td>${totBarcode}</td>
+                                            <td>-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="print-footer">
+                                <p>برنامج متابعة إنتاج GBI</p>
+                                <p>إعداد وتصميم م/ أحمد مسلم</p>
+                                <p>Ahmed.Musalam@newegygold.com - 01201816294</p>
+                            </div>
+                        </div>
+
+                        <script>
+                            window.onload = function() {
+                                window.print();
+                                window.close();
+                            };
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            };
+
+            // 3. طباعة تفاصيل الجرد
+            const executeInventoryDetailPrint = () => {
+                const orientation = printOrientation;
+                if (filteredInventory.length === 0) { alert('لا توجد بيانات للطباعة'); return; }
+                const win = window.open('', '_blank', 'width=1000,height=750');
+                let rows = '';
+                filteredInventory.forEach((r, i) => {
+                    let w = parseFloat(r.totalWeight);
+                    if (isNaN(w) || w === 0) {
+                        w = (parseFloat(r.unitWeight) || 0) * (parseInt(r.count) || 0);
+                    }
+                    rows += `
+                        <tr>
+                            <td>${i+1}</td>
+                            <td>${r.date}</td>
+                            <td>${r.item}</td>
+                            <td>عيار ${r.karat}</td>
+                            <td>${w.toFixed(2)} ج</td>
+                        </tr>
+                    `;
+                });
+
+                win.document.write(`
+                    <html>
+                    <head>
+                        <title>تفاصيل الجرد PDF</title>
+                        <style>${getPrintCSS(orientation)}</style>
+                    </head>
+                    <body>
+                        <div class="page-container">
+                            <div class="content-wrap">
+                                <h1>تفاصيل الجرد</h1>
+                                <div class="sub">نظام متابعة الإنتاج</div>
+                                <div class="print-date"><b>تاريخ الطباعة:</b> ${new Date().toLocaleString('ar-EG')}</div>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>م</th><th>التاريخ</th><th>الصنف</th><th>العيار</th><th>الوزن الإجمالي</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                                <div class="totals">
+                                    <div>إجمالي وزن عيار 24: <span>${inventoryStats.totalWeight24.toFixed(2)} ج</span></div>
+                                    <div>إجمالي وزن عيار 21: <span>${inventoryStats.totalWeight21.toFixed(2)} ج</span></div>
+                                </div>
+                            </div>
+                            <div class="print-footer">
+                                <p>برنامج متابعة إنتاج GBI</p>
+                                <p>إعداد وتصميم م/ أحمد مسلم</p>
+                                <p>Ahmed.Musalam@newegygold.com - 01201816294</p>
+                            </div>
+                        </div>
+                        <script>window.onload=function(){ window.print(); window.close(); }<\/script>
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            };
+
+            // 4. طباعة تقرير مرحلة معينة (تُستخدم من داخل reportModal)
+            const executeReportPrint = (title, data, type) => {
+                const orientation = printOrientation;
+                if (!data || data.length === 0) { alert('لا توجد بيانات للطباعة'); return; }
+                const win = window.open('', '_blank', 'width=1000,height=750');
+                let rows = '';
+                const isOperation = type === 'operation';
+                const isOpBroken = type === 'operationalBroken';
+                const isHallmark = type === 'hallmark';
+                const isPackaging = type === 'packaging';
+                const isBroken = type === 'broken';
+                const isBarcode = type === 'barcode';
+
+                data.forEach((r, i) => {
+                    const total = r.count || 0;
+                    const opBroken = r.operationalBrokenCount || 0;
+                    const hallmark = r.hallmarkCount || 0;
+                    const packaging = r.packagingCount || 0;
+                    const broken = r.brokenCount || 0;
+                    const barcode = r.barcodeCount || 0;
+                    const available = total - opBroken - hallmark - packaging - broken - barcode;
+                    rows += `
+                        <tr>
+                            <td>${i+1}</td>
+                            <td>${r.date}</td>
+                            <td>${r.item} ${r.unitWeight}ج</td>
+                            <td>عيار ${r.karat}</td>
+                            ${isOperation ? `<td>${available}</td><td>${(available*r.unitWeight).toFixed(2)}ج</td>` : ''}
+                            ${isOpBroken ? `<td>${opBroken}</td><td>${(opBroken*r.unitWeight).toFixed(2)}ج</td>` : ''}
+                            ${isHallmark ? `<td>${hallmark}</td><td>${(hallmark*r.unitWeight).toFixed(2)}ج</td>` : ''}
+                            ${isPackaging ? `<td>${packaging}</td><td>${(packaging*r.unitWeight).toFixed(2)}ج</td>` : ''}
+                            ${isBroken ? `<td>${broken}</td><td>${(broken*r.unitWeight).toFixed(2)}ج</td>` : ''}
+                            ${isBarcode ? `<td>${barcode}</td><td>${(barcode*r.unitWeight).toFixed(2)}ج</td>` : ''}
+                        </tr>
+                    `;
+                });
+
+                let headers = `<th>م</th><th>التاريخ</th><th>الصنف والوزن</th><th>العيار</th>`;
+                if (isOperation) headers += `<th>العدد المتاح</th><th>الوزن المتاح</th>`;
+                else if (isOpBroken) headers += `<th>عدد كسر التشغيل</th><th>وزن كسر التشغيل</th>`;
+                else if (isHallmark) headers += `<th>عدد الدمغة</th><th>وزن الدمغة</th>`;
+                else if (isPackaging) headers += `<th>عدد التغليف</th><th>وزن التغليف</th>`;
+                else if (isBroken) headers += `<th>عدد الكسر</th><th>وزن الكسر</th>`;
+                else if (isBarcode) headers += `<th>عدد الباركود</th><th>وزن الباركود</th>`;
+
+                win.document.write(`
+                    <html>
+                    <head>
+                        <title>${title} PDF</title>
+                        <style>${getPrintCSS(orientation)}</style>
+                    </head>
+                    <body>
+                        <div class="page-container">
+                            <div class="content-wrap">
+                                <h1>${title}</h1>
+                                <div class="sub">نظام متابعة الإنتاج</div>
+                                <div class="print-date"><b>تاريخ الطباعة:</b> ${new Date().toLocaleString('ar-EG')}</div>
+                                <table>
+                                    <thead><tr>${headers}</tr></thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                            <div class="print-footer">
+                                <p>برنامج متابعة إنتاج GBI</p>
+                                <p>إعداد وتصميم م/ أحمد مسلم</p>
+                                <p>Ahmed.Musalam@newegygold.com - 01201816294</p>
+                            </div>
+                        </div>
+                        <script>window.onload=function(){ window.print(); window.close(); }<\/script>
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            };
+
+            // ========== واجهة المستخدم ==========
             if (!user.loggedIn) {
                 return (
-                    <div className="bg-[#0f172a] h-screen flex justify-center items-center px-4">
-                        <div className="bg-[#1e293b] p-8 rounded-xl w-full max-w-md border border-slate-700 shadow-2xl text-center">
-                            <h2 className="text-amber-500 text-2xl font-bold mb-2">GBI</h2>
-                            <p className="text-slate-400 text-sm mb-6">تقارير متابعة الإنتاج </p>
+                    <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 h-screen flex justify-center items-center px-4 relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#d97706_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                        <div className="bg-slate-900/90 backdrop-blur-xl p-8 sm:p-10 rounded-3xl w-full max-w-md border border-slate-700/80 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] text-center relative z-10">
+                            <div className="inline-flex items-center justify-center p-4 bg-gradient-to-tr from-amber-600/20 to-amber-400/20 rounded-2xl mb-4 border border-amber-500/30 shadow-inner">
+                                <h2 className="text-amber-400 text-3xl font-black tracking-widest">GBI</h2>
+                            </div>
+                            <h1 className="text-xl font-extrabold text-white mb-1">نظام متابعة الإنتاج</h1>
+                            <p className="text-slate-400 text-xs font-semibold mb-6 tracking-wider">WIP PRODUCTION TRACKING SYSTEM</p>
                             
-                            <form onSubmit={handleLogin} className="text-right">
-                                <div className="mb-4">
-                                    <label className="text-slate-200 block text-base font-semibold mb-2">اختر اسم المستخدم</label>
-                                    <select value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 rounded-lg bg-slate-700 text-white border border-slate-600 focus:outline-none focus:border-amber-500 text-center font-bold text-base">
-                                        <option value="ADMIN">ADMIN </option>
-                                        <option value="VIEWER_1">VIEWER 1 (عرض ومتابعة البوكسات فقط)</option>
+                            <form onSubmit={handleLogin} className="text-right space-y-4">
+                                <div>
+                                    <label className="text-slate-300 block text-xs font-bold mb-1.5">اسم المستخدم</label>
+                                    <select value={username} onChange={e => setUsername(e.target.value)}
+                                        className="w-full p-3.5 rounded-xl bg-slate-800/90 text-white border border-slate-700 focus:outline-none focus:border-amber-500 text-center font-bold transition-all shadow-sm">
+                                        <option value="ADMIN">ADMIN</option>
+                                        <option value="VIEWER_1">VIEWER 1 (عرض)</option>
                                     </select>
                                 </div>
-
-                                <div className="mb-6">
-                                    <label className="text-slate-200 block text-base font-semibold mb-2">كلمة المرور</label>
-                                    <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="اكتب 1234 للتجربة" className="w-full p-3 rounded-lg bg-slate-700 text-white text-center border border-slate-600 focus:outline-none focus:border-amber-500 tracking-widest font-bold text-base" />
+                                <div>
+                                    <label className="text-slate-300 block text-xs font-bold mb-1.5">كلمة المرور</label>
+                                    <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
+                                        placeholder="أدخل كلمة المرور (1234)"
+                                        className="w-full p-3.5 rounded-xl bg-slate-800/90 text-white text-center border border-slate-700 focus:outline-none focus:border-amber-500 font-bold transition-all shadow-sm" />
                                 </div>
-
-                                <button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 text-white p-3 rounded-lg font-bold transition-all shadow-lg text-center text-lg">دخول للنظام</button>
+                                <button type="submit"
+                                    className="w-full bg-gradient-to-r from-amber-600 via-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white p-3.5 rounded-xl font-extrabold transition-all shadow-lg shadow-amber-900/30 text-base mt-2">
+                                    دخول النظام
+                                </button>
                             </form>
-                            <div className="mt-8 pt-4 border-t border-slate-700 text-slate-500 text-xs">
-                                تصميم وتطوير م. أحمد مسلم
+
+                            <div className="mt-8 pt-5 border-t border-slate-800/80 text-slate-400 text-xs font-bold flex flex-col items-center gap-1.5">
+                                <p className="text-slate-200">إعداد وتصميم م/ أحمد مسلم</p>
+                                <p className="text-amber-500 font-mono tracking-wider" dir="ltr">01201816294</p>
                             </div>
                         </div>
                     </div>
@@ -414,294 +1182,759 @@
             }
 
             return (
-                <div className="p-6 max-w-7xl mx-auto text-base">
-                    {/* الهيدر العلوي الذكي */}
-                    <div className="flex flex-col lg:flex-row justify-between items-center border-b border-slate-200 pb-5 mb-8 gap-4 bg-white p-5 rounded-xl shadow-sm">
-                        <div className="text-center lg:text-right">
-                            <h1 className="text-3xl font-bold text-slate-800">نظام متابعة الإنتاج</h1>
-                            <p className="text-base text-slate-500 mt-1">المستخدم: <span className="font-bold text-blue-900 text-lg">{user.name}</span> | الدور: <span className="text-amber-700 font-bold text-lg">{user.role === 'admin' ? 'صلاحية كاملة' : 'تقارير الإنتاج'}</span></p>
-                        </div>
-                        
-                        <div className="flex flex-wrap items-center justify-center gap-3">
-                            {user.role === 'admin' && (
-                                <button 
-                                    onClick={handlePrintMasterReport}
-                                    className="bg-slate-900 hover:bg-slate-950 text-white font-bold px-6 py-3 rounded-lg text-base transition-all shadow-md flex items-center gap-2 border border-slate-800"
-                                >
-                                    <span>طباعة تقرير شامل لحركة الإنتاج 📊</span>
+                <div className="p-4 md:p-8 max-w-7xl mx-auto flex flex-col min-h-screen">
+
+                    <div className="flex-1">
+                        {/* الهيدر الرئيسي */}
+                        <div className="flex flex-col lg:flex-row justify-between items-center border border-slate-200/80 pb-5 mb-8 gap-4 bg-white p-6 rounded-3xl shadow-sm no-print">
+                            <div className="text-center lg:text-right">
+                                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">نظام متابعة الإنتاج</h1>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                                {/* أزرار اختيار اتجاه الطباعة (جديد) */}
+                                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-sm">
+                                    <button 
+                                        onClick={() => setPrintOrientation('portrait')}
+                                        className={`orientation-btn px-3 py-1.5 rounded-xl text-sm font-bold transition ${printOrientation === 'portrait' ? 'active bg-blue-600 text-white border-blue-600' : 'text-slate-600 hover:bg-slate-200'}`}
+                                    >
+                                        📄 طولي
+                                    </button>
+                                    <button 
+                                        onClick={() => setPrintOrientation('landscape')}
+                                        className={`orientation-btn px-3 py-1.5 rounded-xl text-sm font-bold transition ${printOrientation === 'landscape' ? 'active bg-emerald-600 text-white border-emerald-600' : 'text-slate-600 hover:bg-slate-200'}`}
+                                    >
+                                        📃 عرضي
+                                    </button>
+                                </div>
+
+                                {user.role === 'admin' && (
+                                    <>
+                                        <button onClick={executeComprehensivePrint}
+                                            className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-md shadow-slate-900/10 transition flex items-center gap-2">
+                                            📄 طباعة الحركات
+                                        </button>
+
+                                        <button onClick={executeAllReportsPrint}
+                                            className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-md shadow-amber-600/15 transition flex items-center gap-2">
+                                            📊 طباعة التقارير
+                                        </button>
+
+                                        <button onClick={openInventoryFullscreen}
+                                            className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-md shadow-amber-600/15 transition">
+                                            📋 الجرد 
+                                        </button>
+                                    </>
+                                )}
+                                <button onClick={() => setUser({ loggedIn: false, role: '', name: '' })}
+                                    className="bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-md shadow-red-500/15 transition">
+                                    خروج
                                 </button>
-                            )}
-                            <button onClick={() => setUser({ loggedIn: false, role: '', name: '' })} className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-lg text-base font-bold transition-all shadow-sm">تسجيل الخروج</button>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* مؤشر تحميل البيانات من Firebase */}
-                    {loading && (
-                        <div className="text-center p-4 mb-4 bg-blue-50 text-blue-800 rounded-lg font-bold border border-blue-200 animate-pulse">
-                            🔄 جاري تحديث ومزامنة البيانات مع السيرفر لحظياً...
-                        </div>
-                    )}
-
-                    {/* كروت التقارير الذكية */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-8">
-                        {/* بوكس 1: الدمغة */}
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100/40 p-6 rounded-xl shadow-md border-t-4 border-blue-600 border-x border-b border-slate-300 flex flex-col justify-between text-center transform hover:scale-[1.01] transition-all">
+                        {/* فلتر التاريخ */}
+                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8 max-w-xl mx-auto flex flex-wrap justify-center items-end gap-4 no-print">
                             <div>
-                                <p className="text-lg font-bold text-blue-900 mb-4 border-b pb-2 border-blue-200">إجمالي الوزن المسلم للدمغة</p>
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-blue-200 shadow-sm">
-                                        <span className="text-sm font-bold text-slate-600">عيار 24 :</span>
-                                        <span className="font-bold text-slate-900 text-lg">{hallmark24.toFixed(2)} ج</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-blue-200 shadow-sm">
-                                        <span className="text-sm font-bold text-slate-600">عيار 21 :</span>
-                                        <span className="font-bold text-slate-900 text-lg">{hallmark21.toFixed(2)} ج</span>
-                                    </div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5 text-center">من تاريخ</label>
+                                <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)}
+                                    className="p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:border-blue-600 text-sm font-semibold shadow-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5 text-center">إلى تاريخ</label>
+                                <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)}
+                                    className="p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:border-blue-600 text-sm font-semibold shadow-sm" />
+                            </div>
+                            <button onClick={() => { setFilterFrom(''); setFilterTo(''); }}
+                                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold transition border border-slate-300">
+                                إلغاء الفلتر
+                            </button>
+                        </div>
+
+                        {/* ========== بوكسات التقارير ========== */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 mb-5">
+                            <div onClick={() => openDetails('operation', 'تقرير التشغيل ')} className="summary-card border-blue">
+                                <div className="card-title">تقرير التشغيل </div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{stats.stats24.operation.toFixed(2)} ج</span>
+                                </div>
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{stats.stats21.operation.toFixed(2)} ج</span>
                                 </div>
                             </div>
-                            <button onClick={() => openDetails('hallmark')} className="text-blue-900 font-bold text-sm mt-6 hover:text-blue-950 mx-auto w-fit bg-white hover:bg-slate-50 px-5 py-2.5 rounded-lg border border-slate-300 shadow-md transition-all">عرض التفاصيل ⬅️</button>
-                        </div>
 
-                        {/* بوكس 2: الباركود */}
-                        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/40 p-6 rounded-xl shadow-md border-t-4 border-emerald-600 border-x border-b border-slate-300 flex flex-col justify-between text-center transform hover:scale-[1.01] transition-all">
-                            <div>
-                                <p className="text-lg font-bold text-emerald-900 mb-4 border-b pb-2 border-emerald-200">إجمالي الوزن المسلم للباركود</p>
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-emerald-200 shadow-sm">
-                                        <span className="text-sm font-bold text-slate-600">عيار 24 :</span>
-                                        <span className="font-bold text-emerald-700 text-lg">{barcode24.toFixed(2)} ج</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-emerald-200 shadow-sm">
-                                        <span className="text-sm font-bold text-slate-600">عيار 21 :</span>
-                                        <span className="font-bold text-emerald-700 text-lg">{barcode21.toFixed(2)} ج</span>
-                                    </div>
+                            <div onClick={() => openDetails('hallmark', 'الدمغة')} className="summary-card border-indigo">
+                                <div className="card-title">الدمغة</div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{stats.stats24.hallmark.toFixed(2)} ج</span>
+                                </div>
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{stats.stats21.hallmark.toFixed(2)} ج</span>
                                 </div>
                             </div>
-                            <button onClick={() => openDetails('barcode')} className="text-emerald-800 font-bold text-sm mt-6 hover:text-emerald-900 mx-auto w-fit bg-white hover:bg-slate-50 px-5 py-2.5 rounded-lg border border-slate-300 shadow-md transition-all">عرض التفاصيل ⬅️</button>
-                        </div>
 
-                        {/* بوكس 3: المتبقي */}
-                        <div className="bg-gradient-to-br from-amber-50 to-amber-100/40 p-6 rounded-xl shadow-md border-t-4 border-amber-500 border-x border-b border-slate-300 flex flex-col justify-between text-center transform hover:scale-[1.01] transition-all">
-                            <div>
-                                <p className="text-lg font-bold text-amber-900 mb-4 border-b pb-2 border-amber-200">إجمالي الوزن المتبقي بالدمغة </p>
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-amber-200 shadow-sm">
-                                        <span className="text-sm font-bold text-amber-800">عيار 24 :</span>
-                                        <span className="font-bold text-amber-700 text-lg">{remaining24.toFixed(2)} ج</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-white/90 p-3 rounded-lg px-5 border border-amber-200 shadow-sm">
-                                        <span className="text-sm font-bold text-amber-800">عيار 21 :</span>
-                                        <span className="font-bold text-amber-700 text-lg">{remaining21.toFixed(2)} ج</span>
-                                    </div>
+                            <div onClick={() => openDetails('packaging', 'التغليف')} className="summary-card border-emerald">
+                                <div className="card-title">التغليف</div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{stats.stats24.packaging.toFixed(2)} ج</span>
+                                </div>
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{stats.stats21.packaging.toFixed(2)} ج</span>
                                 </div>
                             </div>
-                            <button onClick={() => openDetails('remaining')} className="text-amber-800 font-bold text-sm mt-6 hover:text-amber-900 mx-auto w-fit bg-white hover:bg-slate-50 px-5 py-2.5 rounded-lg border border-slate-300 shadow-md transition-all">عرض التفاصيل ⬅️</button>
+
+                            <div onClick={() => openDetails('barcode', 'الباركود')} className="summary-card border-purple">
+                                <div className="card-title">الباركود</div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{stats.stats24.barcode.toFixed(2)} ج</span>
+                                </div>
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{stats.stats21.barcode.toFixed(2)} ج</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* فورم الإدخال الذكي */}
-                    {user.role === 'admin' && (
-                        <div className="bg-white p-6 rounded-xl shadow-md mb-8 border border-slate-200 text-center">
-                            <h2 className="text-xl font-bold text-slate-800 mb-5 border-b pb-2 text-right">تسجيل تشغيلة (إلى الدمغة)</h2>
-                            <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end text-base">
-                                <div>
-                                    <label className="block text-base font-semibold text-slate-600 mb-1.5 text-center">الصنف</label>
-                                    <select value={newItem.item} onChange={(e) => handleItemChange(e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-blue-600 font-bold text-center text-base">
-                                        <option value="توله">توله</option>
-                                        <option value="جنيه">جنيه</option>
-                                        <option value="نصف جنيه">نصف جنيه</option>
-                                        <option value="ربع جنيه">ربع جنيه</option>
-                                    </select>
+                        {/* الصف الثاني للبوكسات */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+                            <div onClick={() => openDetails('operationalBroken', 'كسر التشغيل')} className="summary-card border-orange">
+                                <div className="card-title">كسر تشغيل</div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{stats.stats24.opBroken.toFixed(2)} ج</span>
                                 </div>
-
-                                <div>
-                                    <label className="block text-base font-semibold text-slate-500 mb-1.5 text-center">العيار </label>
-                                    <div className="w-full p-2.5 bg-amber-50 text-amber-800 font-bold text-center rounded-lg border border-amber-200 text-base">
-                                        عيار {newItem.karat}
-                                    </div>
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{stats.stats21.opBroken.toFixed(2)} ج</span>
                                 </div>
+                            </div>
 
-                                <div>
-                                    <label className="block text-base font-semibold text-slate-600 mb-1.5 text-center">وزن القطعة (جرام)</label>
-                                    <select value={newItem.unitWeight} onChange={(e) => setNewItem({...newItem, unitWeight: e.target.value})} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-blue-600 text-center font-bold text-blue-900 text-base">
-                                        <option value="1">1</option>
-                                        <option value="2">2</option>
-                                        <option value="2.5">2.5</option>
-                                        <option value="4">4</option>
-                                        <option value="5">5</option>
-                                        <option value="8">8</option>
-                                        <option value="10">10</option>
-                                        <option value="20">20</option>
-                                        <option value="31.10">31.10</option>
-                                        <option value="50">50</option>
-                                        <option value="100">100</option>
-                                    </select>
+                            <div onClick={() => openDetails('broken', 'كسر الدمغة')} className="summary-card border-red">
+                                <div className="card-title">كسر دمغة</div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{stats.stats24.broken.toFixed(2)} ج</span>
                                 </div>
-
-                                <div>
-                                    <label className="block text-base font-semibold text-slate-600 mb-1.5 text-center">العدد</label>
-                                    <input type="number" required min="1" value={newItem.count} onChange={(e) => setNewItem({...newItem, count: e.target.value})} placeholder="0" className="w-full p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 text-center font-bold text-base" />
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{stats.stats21.broken.toFixed(2)} ج</span>
                                 </div>
+                            </div>
 
-                                <div>
-                                    <label className="block text-base font-semibold text-slate-500 mb-1.5 text-center">الوزن الإجمالي</label>
-                                    <div className="w-full p-2.5 bg-slate-100 text-slate-700 font-bold text-center rounded-lg border border-slate-200 text-base">
-                                        {calculatedTotalWeight.toFixed(2)} ج
-                                    </div>
+                            <div className="summary-card border-stone">
+                                <div className="card-title">إجمالي الكسر</div>
+                                <div className="karat-row karat-row-24">
+                                    <span className="karat-label">عيار 24</span>
+                                    <span className="karat-value">{(stats.stats24.opBroken + stats.stats24.broken).toFixed(2)} ج</span>
                                 </div>
-
-                                <button type="submit" className="bg-blue-900 hover:bg-blue-950 text-white font-bold p-2.5 rounded-lg transition-all shadow-md text-center w-full text-base py-3"> حفظ </button>
-                            </form>
+                                <div className="karat-row karat-row-21">
+                                    <span className="karat-label">عيار 21</span>
+                                    <span className="karat-value">{(stats.stats21.opBroken + stats.stats21.broken).toFixed(2)} ج</span>
+                                </div>
+                                <div className="mt-2 text-xs text-slate-400 font-bold text-center">(كسر تشغيل + كسر دمغة)</div>
+                            </div>
                         </div>
-                    )}
 
-                    {/* جدول البيانات الرئيسي */}
-                    {user.role === 'admin' && (
-                        <div className="bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 transition-all duration-300 mt-6 text-base">
-                            <div className="p-5 border-b border-slate-200 bg-slate-50 text-center">
-                                <h2 className="text-xl font-bold text-slate-800"> بيانات الحركة</h2>
+                        {/* نموذج التسجيل */}
+                        {user.role === 'admin' && (
+                            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200/80 mb-8 no-print">
+                                <h2 className="text-xl font-extrabold text-slate-800 mb-6 border-b pb-4">تسجيل تشغيلة جديدة</h2>
+                                <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-6 gap-5 items-end">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">الصنف</label>
+                                        <select value={newItem.item} onChange={e => handleItemChange(e.target.value)}
+                                            className="w-full p-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 font-bold shadow-sm">
+                                            <option value="توله">توله</option>
+                                            <option value="جنيه">جنيه</option>
+                                            <option value="نصف جنيه">نصف جنيه</option>
+                                            <option value="ربع جنيه">ربع جنيه</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1.5">العيار</label>
+                                        <div className="w-full p-3 bg-amber-50 text-amber-800 font-extrabold text-center rounded-2xl border border-amber-200 shadow-sm">
+                                            عيار {newItem.karat}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">وزن القطعة (ج)</label>
+                                        <select value={newItem.unitWeight} onChange={e => setNewItem({ ...newItem, unitWeight: e.target.value })}
+                                            className="w-full p-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 text-center font-bold shadow-sm">
+                                            <option value="1">1</option><option value="2">2</option><option value="2.5">2.5</option>
+                                            <option value="4">4</option><option value="5">5</option><option value="8">8</option>
+                                            <option value="10">10</option><option value="20">20</option><option value="31.10">31.10</option>
+                                            <option value="50">50</option><option value="100">100</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">العدد</label>
+                                        <input type="number" required min="1" value={newItem.count} onChange={e => setNewItem({ ...newItem, count: e.target.value })}
+                                            placeholder="0"
+                                            className="w-full p-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 text-center font-bold shadow-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1.5">الوزن الإجمالي</label>
+                                        <div className="w-full p-3 bg-slate-50 text-slate-800 font-extrabold text-center rounded-2xl border border-slate-200 shadow-sm">
+                                            {calcTotalWeight(newItem.unitWeight, newItem.count).toFixed(2)} ج
+                                        </div>
+                                    </div>
+                                    <button type="submit"
+                                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-3.5 rounded-2xl shadow-lg w-full transition text-base">حفظ التشغيلة</button>
+                                </form>
+                            </div>
+                        )}
+
+                        {/* ========== الجدول الرئيسي ========== */}
+                        <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-slate-200">
+                            <div className="p-5 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center no-print">
+                                <h2 className="text-xl font-extrabold text-slate-800">جميع الحركات</h2>
+                                {loading && <span className="text-blue-600 animate-pulse text-sm font-bold">⏳ جاري التحميل...</span>}
                             </div>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-center border-collapse">
-                                    <thead>
-                                        <tr className="bg-slate-800 text-white text-base">
-                                            <th className="p-4 text-center">التاريخ </th>
-                                            <th className="p-4 text-center">الصنف </th>
-                                            <th className="p-4 text-center">العيار</th>
-                                            <th className="p-4 text-center">العدد الكلي</th>
-                                            <th className="p-4 text-center">الوزن الإجمالي</th>
-                                            <th className="p-4 text-center bg-emerald-900 text-white">العدد المسلم للباركود </th>
-                                            <th className="p-4 text-center">حالة التسليم  </th>
+                                <table className="w-full text-center border-collapse text-sm">
+                                    <thead className="bg-slate-900 text-white font-bold">
+                                        <tr>
+                                            <th className="p-3.5">التاريخ</th>
+                                            <th className="p-3.5">الصنف</th>
+                                            <th className="p-3.5">العيار</th>
+                                            <th className="p-3.5">العدد الكلي</th>
+                                            <th className="p-3.5">الوزن الكلي</th>
+                                            <th className="p-3.5 bg-orange-800">كسر تشغيل</th>
+                                            <th className="p-3.5 bg-blue-800">الدمغة</th>
+                                            <th className="p-3.5 bg-emerald-800">التغليف</th>
+                                            <th className="p-3.5 bg-red-800">كسر دمغة</th>
+                                            <th className="p-3.5 bg-purple-800">الباركود</th>
+                                            <th className="p-3.5">الحالة</th>
+                                            {user.role === 'admin' && <th className="p-3.5 no-print">إجراءات</th>}
                                         </tr>
                                     </thead>
-                                    <tbody className="text-base divide-y divide-slate-200">
-                                        {dataList.length === 0 ? (
-                                            <tr>
-                                                <td colSpan="7" className="p-8 text-center text-slate-400 font-bold">لا توجد بيانات مسجلة حالياً في النظام.</td>
-                                            </tr>
+                                    <tbody className="divide-y divide-slate-200 font-semibold">
+                                        {filteredData.length === 0 ? (
+                                            <tr><td colSpan={user.role === 'admin' ? 12 : 11} className="p-10 text-slate-400 font-bold">لا توجد بيانات مسجلة</td></tr>
                                         ) : (
-                                            dataList.map((row) => {
-                                                const isCompleted = row.countBarcode >= row.count;
+                                            filteredData.map(row => {
+                                                const total = row.count || 0;
+                                                const opBroken = row.operationalBrokenCount || 0;
+                                                const hallmark = row.hallmarkCount || 0;
+                                                const packaging = row.packagingCount || 0;
+                                                const broken = row.brokenCount || 0;
+                                                const barcode = row.barcodeCount || 0;
+                                                const available = total - opBroken - hallmark - packaging - broken - barcode;
+
+                                                const status = getStatus(row);
+
+                                                const maxOpBroken = available;
+                                                const maxHallmark = available;
+                                                const maxPackaging = hallmark;
+                                                const maxBroken = hallmark;
+                                                const maxBarcode = packaging;
+
                                                 return (
-                                                    <tr key={row.id} className="hover:bg-slate-50/80 transition-all text-center">
-                                                        <td className="p-4 text-slate-500 font-mono text-sm text-center">{row.date}</td>
-                                                        <td className="p-4 font-bold text-slate-800 text-center">{row.item} {row.unitWeight} جرام</td>
-                                                        <td className="p-4 text-center">
-                                                            <span className={`inline-block px-3 py-1 rounded font-bold text-sm ${row.karat === '24' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    <tr key={row.id} className="hover:bg-slate-50/80 transition">
+                                                        <td className="p-3.5 text-slate-500 font-mono text-xs">{row.date}</td>
+                                                        <td className="p-3.5 font-extrabold">{row.item} {row.unitWeight}ج</td>
+                                                        <td className="p-3.5">
+                                                            <span className={`px-3 py-1 rounded-lg text-xs font-black ${row.karat === '24' ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-yellow-100 text-yellow-900 border border-yellow-200'}`}>
                                                                 عيار {row.karat}
                                                             </span>
                                                         </td>
-                                                        <td className="p-4 font-bold text-blue-900 text-center text-lg">{row.count}</td> 
-                                                        <td className="p-4 font-bold text-purple-900 text-center text-lg">{row.totalWeight.toFixed(2)} ج</td>
-                                                        
-                                                        <td className="p-4 bg-emerald-50/30 text-center">
-                                                            {!isCompleted ? (
-                                                                <div className="flex items-center justify-center gap-2">
-                                                                    <input 
-                                                                        type="number" 
-                                                                        min="0"
-                                                                        max={row.count}
-                                                                        value={row.countBarcode || ''} 
-                                                                        placeholder="المستلم"
-                                                                        onChange={(e) => handleUpdateBarcode(row.docId, row.id, e.target.value)}
-                                                                        className="p-2 border border-emerald-600 rounded bg-white text-center w-24 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-800 text-base"
-                                                                    />
-                                                                    <span className="text-sm text-slate-500 font-semibold">من {row.count}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="font-bold text-emerald-700 text-lg">تم بالكامل ({row.countBarcode} ق)</span>
-                                                            )}
+                                                        <td className="p-3.5 font-extrabold text-blue-900">{total}</td>
+                                                        <td className="p-3.5 font-extrabold text-purple-900">{(parseFloat(row.totalWeight) || 0).toFixed(2)}ج</td>
+
+                                                        <td className="p-3.5 bg-orange-50/30">
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <span className="font-bold text-orange-700">{opBroken}</span>
+                                                                <span className="remain-badge">متاح: {available}</span>
+                                                                {user.role === 'admin' && available > 0 && (
+                                                                    <button onClick={() => openMoveModal(row.docId, 'operationalBrokenCount', 'كسر تشغيل', 'hallmarkCount', 'التشغيل', maxOpBroken, opBroken, row.unitWeight, available)}
+                                                                        className="stage-btn bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-bold px-2.5 py-1 rounded-lg mt-0.5 no-print shadow-sm">
+                                                                        نقل←
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </td>
-                                                        
-                                                        <td className="p-4 text-center">
-                                                            <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold ${
-                                                                isCompleted ? 'bg-green-100 text-green-700' : row.countBarcode > 0 ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+
+                                                        <td className="p-3.5 bg-blue-50/30">
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <span className="font-bold text-blue-700">{hallmark}</span>
+                                                                <span className="remain-badge">متاح: {available}</span>
+                                                                {user.role === 'admin' && available > 0 && (
+                                                                    <button onClick={() => openMoveModal(row.docId, 'hallmarkCount', 'الدمغة', 'operationalBrokenCount', 'التشغيل', maxHallmark, hallmark, row.unitWeight, available)}
+                                                                        className="stage-btn bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-lg mt-0.5 no-print shadow-sm">
+                                                                        نقل ←
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        <td className="p-3.5 bg-emerald-50/30">
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <span className="font-bold text-emerald-700">{packaging}</span>
+                                                                <span className="remain-badge">من دمغة: {hallmark}</span>
+                                                                {user.role === 'admin' && hallmark > 0 && (
+                                                                    <button onClick={() => openMoveModal(row.docId, 'packagingCount', 'التغليف', 'hallmarkCount', 'الدمغة', maxPackaging, packaging, row.unitWeight, hallmark)}
+                                                                        className="stage-btn bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-bold px-2.5 py-1 rounded-lg mt-0.5 no-print shadow-sm">
+                                                                        نقل →
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        <td className="p-3.5 bg-red-50/30">
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <span className="font-bold text-red-700">{broken}</span>
+                                                                <span className="remain-badge">من دمغة: {hallmark}</span>
+                                                                {user.role === 'admin' && hallmark > 0 && (
+                                                                    <button onClick={() => openMoveModal(row.docId, 'brokenCount', 'كسر دمغة', 'hallmarkCount', 'الدمغة', maxBroken, broken, row.unitWeight, hallmark)}
+                                                                        className="stage-btn bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold px-2.5 py-1 rounded-lg mt-0.5 no-print shadow-sm">
+                                                                        نقل →
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        <td className="p-3.5 bg-purple-50/30">
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <span className="font-bold text-purple-700">{barcode}</span>
+                                                                <span className="remain-badge">من تغليف: {packaging}</span>
+                                                                {user.role === 'admin' && packaging > 0 && (
+                                                                    <button onClick={() => openMoveModal(row.docId, 'barcodeCount', 'الباركود', 'packagingCount', 'التغليف', maxBarcode, barcode, row.unitWeight, packaging)}
+                                                                        className="stage-btn bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold px-2.5 py-1 rounded-lg mt-0.5 no-print shadow-sm">
+                                                                        نقل →
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        <td className="p-3.5">
+                                                            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold ${
+                                                                status.includes('تم الإنتاج') ? 'bg-green-100 text-green-800 border border-green-200' :
+                                                                status.includes('باركود') ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                                                                status.includes('تغليف') ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                                                status.includes('دمغة') ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
+                                                                status.includes('كسر تشغيل') ? 'bg-orange-100 text-orange-800 border border-orange-200' :
+                                                                'bg-slate-100 text-slate-700 border border-slate-200'
                                                             }`}>
-                                                                {row.status}
+                                                                {status}
                                                             </span>
                                                         </td>
+
+                                                        {user.role === 'admin' && (
+                                                            <td className="p-3.5 no-print">
+                                                                <div className="flex justify-center gap-2">
+                                                                    <button onClick={() => openEditModal(row)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">تعديل</button>
+                                                                    <button onClick={() => handleDelete(row.docId)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">حذف</button>
+                                                                </div>
+                                                            </td>
+                                                        )}
                                                     </tr>
-                                                )
+                                                );
                                             })
                                         )}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
-                    )}
 
-                    {/* نافذة عرض تفاصيل التقارير المنبثقة */}
-                    {modal.isOpen && (
-                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center p-4 z-50">
-                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col text-base">
-                                <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                                    <div className="flex items-center gap-4">
-                                        <h3 className="font-bold text-2xl text-slate-800">{modal.title}</h3>
-                                        {user.role === 'admin' && (
-                                            <button 
-                                                onClick={() => handlePrintReport(modal.title, modal.content, modal.type)}
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg shadow transition-all flex items-center gap-2"
-                                            >
-                                                <span>طباعة هذا التقرير منفرداً 🖨️</span>
-                                            </button>
-                                        )}
+                        {/* ========== نوافذ منبثقة أخرى ========== */}
+
+                        {/* نافذة النقل */}
+                        {moveModal.isOpen && (
+                            <div className="fixed inset-0 modal-overlay flex justify-center items-center p-4 z-50 no-print">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-slate-100">
+                                    <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-3">نقل إلى {moveModal.targetLabel}</h3>
+                                    <div className="mb-5 space-y-2.5">
+                                        <p className="text-sm text-slate-600 font-bold">
+                                            من: <span className="text-amber-700">{moveModal.sourceLabel}</span>
+                                            <span className="mx-2 text-slate-400">←</span>
+                                            إلى: <span className="text-blue-700">{moveModal.targetLabel}</span>
+                                        </p>
+                                        <p className="text-sm text-slate-600 font-bold">المتاح للنقل: <span className="text-green-700 font-extrabold">{moveModal.maxMove}</span></p>
+                                        <p className="text-sm text-slate-600 font-bold">الكمية الحالية في {moveModal.targetLabel}: <span>{moveModal.currentTarget}</span></p>
+                                        <p className="text-sm text-slate-600 font-bold">وزن القطعة: {moveModal.unitWeight} جرام</p>
+                                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-2xl text-xs text-blue-800 font-bold">
+                                            ⚡ سيتم خصم الكمية المنقولة تلقائياً من {moveModal.sourceLabel}
+                                        </div>
                                     </div>
-                                    <button onClick={() => setModal({ isOpen: false, title: '', content: [], type: '' })} className="text-slate-400 hover:text-slate-600 font-bold bg-slate-200 hover:bg-slate-300 w-9 h-9 rounded-full flex justify-center items-center text-lg">✕</button>
-                                </div>
-                                <div className="p-6 overflow-y-auto">
-                                    {modal.content.length === 0 ? (
-                                        <p className="text-center text-slate-500 py-8 font-bold text-lg">لا توجد حركات مسجلة تندرج تحت هذا التقرير حالياً.</p>
-                                    ) : (
-                                        <table className="w-full text-center border-collapse text-base">
-                                            <thead>
-                                                <tr className="bg-slate-700 text-white text-base border-b border-slate-300">
-                                                    <th className="p-3 text-center">التاريخ</th>
-                                                    <th className="p-3 text-center">الصنف والوزن</th>
-                                                    <th className="p-3 text-center">العيار</th>
-                                                    
-                                                    {modal.type === 'hallmark' && <th className="p-3 text-center">العدد المرسل للدمغة</th>}
-                                                    {modal.type === 'hallmark' && <th className="p-3 text-center">إجمالي وزن الدمغة الحالي</th>}
-                                                    
-                                                    {modal.type === 'barcode' && <th className="p-3 text-center">العدد التام المستلم بالباركود</th>}
-                                                    {modal.type === 'barcode' && <th className="p-3 text-center">إجمالي وزن الإنتاج التام</th>}
-                                                    
-                                                    {modal.type === 'remaining' && <th className="p-3 text-center">العدد المتبقي بالدمغة</th>}
-                                                    {modal.type === 'remaining' && <th className="p-3 text-center">إجمالي الوزن المتبقي</th>}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-200">
-                                                {modal.content.map((r, idx) => {
-                                                    const remCount = r.count - r.countBarcode;
-                                                    const remWeight = remCount * r.unitWeight;
-                                                    return (
-                                                        <tr key={idx} className="hover:bg-slate-50 text-center">
-                                                            <td className="p-3 text-slate-500 font-mono text-sm text-center">{r.date}</td>
-                                                            <td className="p-3 font-bold text-slate-800 text-center">{r.item} {r.unitWeight} جرام</td>
-                                                            
-                                                            <td className="p-3 font-bold text-center">
-                                                                <span className={`px-2 py-0.5 rounded text-xs ${r.karat === '24' ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                                                    عيار {r.karat}
-                                                                </span>
-                                                            </td>
-                                                            
-                                                            {modal.type === 'hallmark' && <td className="p-3 text-blue-900 font-bold text-center text-lg">{r.count}</td>}
-                                                            {modal.type === 'hallmark' && <td className="p-3 text-purple-900 font-bold text-center text-lg">{r.totalWeight.toFixed(2)} ج</td>}
-                                                            
-                                                            {modal.type === 'barcode' && <td className="p-3 text-emerald-700 font-bold text-center text-lg">{r.countBarcode}</td>}
-                                                            {modal.type === 'barcode' && <td className="p-3 text-teal-900 font-bold text-center text-lg">{(r.countBarcode * r.unitWeight).toFixed(2)} ج</td>}
-                                                            
-                                                            {modal.type === 'remaining' && <td className="p-3 text-amber-700 font-bold text-center text-lg">{remCount}</td>}
-                                                            {modal.type === 'remaining' && <td className="p-3 text-red-600 font-bold text-center text-lg">{remWeight.toFixed(2)} ج</td>}
-                                                        </tr>
-                                                    )
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    )}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">العدد المنقول</label>
+                                        <input type="number" min="1" max={moveModal.maxMove} value={moveInput} onChange={e => setMoveInput(e.target.value)}
+                                            className="w-full p-3.5 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 text-center font-bold text-lg shadow-sm" />
+                                        <p className="text-xs text-slate-400 mt-1.5 font-semibold">أدخل عدد القطع المراد نقلها</p>
+                                    </div>
+                                    <div className="flex justify-end gap-3 mt-6 border-t pt-4">
+                                        <button onClick={() => setMoveModal({ isOpen: false, docId: null, targetField: '', targetLabel: '', sourceField: '', sourceLabel: '', maxMove: 0, currentTarget: 0, unitWeight: 1, available: 0 })}
+                                            className="bg-slate-100 hover:bg-slate-200 px-5 py-2.5 rounded-2xl font-bold text-sm text-slate-700">إلغاء</button>
+                                        <button onClick={handleMove}
+                                            className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-2.5 rounded-2xl font-bold text-sm shadow-md">تأكيد النقل</button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {/* نافذة التعديل الشامل */}
+                        {editModal.isOpen && editModal.record && (
+                            <div className="fixed inset-0 modal-overlay flex justify-center items-center p-4 z-50 no-print">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-8 border border-slate-100">
+                                    <h3 className="text-2xl font-bold text-slate-800 mb-6 border-b pb-4">تعديل شامل</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">الصنف</label>
+                                            <select value={editModal.record.item} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, item: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold shadow-sm">
+                                                <option value="توله">توله</option><option value="جنيه">جنيه</option>
+                                                <option value="نصف جنيه">نصف جنيه</option><option value="ربع جنيه">ربع جنيه</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">العيار</label>
+                                            <select value={editModal.record.karat} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, karat: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold shadow-sm">
+                                                <option value="24">24</option><option value="21">21</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">وزن القطعة (ج)</label>
+                                            <input type="number" step="0.01" value={editModal.record.unitWeight} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, unitWeight: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">العدد الكلي</label>
+                                            <input type="number" min="1" value={editModal.record.count} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, count: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-orange-700 mb-1.5">كسر تشغيل</label>
+                                            <input type="number" min="0" value={editModal.record.operationalBrokenCount || 0} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, operationalBrokenCount: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-blue-700 mb-1.5">الدمغة</label>
+                                            <input type="number" min="0" value={editModal.record.hallmarkCount || 0} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, hallmarkCount: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-emerald-700 mb-1.5">التغليف</label>
+                                            <input type="number" min="0" value={editModal.record.packagingCount || 0} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, packagingCount: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-red-700 mb-1.5">كسر دمغة</label>
+                                            <input type="number" min="0" value={editModal.record.brokenCount || 0} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, brokenCount: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-purple-700 mb-1.5">الباركود</label>
+                                            <input type="number" min="0" value={editModal.record.barcodeCount || 0} onChange={e => setEditModal({ ...editModal, record: { ...editModal.record, barcodeCount: e.target.value } })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div className="col-span-2 text-xs text-slate-500 font-bold bg-slate-50 p-3.5 rounded-2xl border">
+                                            ⚡ تأكد أن مجموع (كسر تشغيل + دمغة + تغليف + كسر دمغة + باركود) ≤ العدد الكلي
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end gap-3 mt-6 border-t pt-4">
+                                        <button onClick={() => setEditModal({ isOpen: false, record: null })}
+                                            className="bg-slate-100 hover:bg-slate-200 px-5 py-2.5 rounded-2xl font-bold text-sm text-slate-700">إلغاء</button>
+                                        <button onClick={handleEditSave}
+                                            className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-2.5 rounded-2xl font-bold text-sm shadow-md">حفظ التغييرات</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* نافذة تقارير التفاصيل عند الضغط على البوكسات */}
+                        {reportModal.isOpen && (
+                            <div className="fixed inset-0 modal-overlay flex justify-center items-center p-4 z-50 no-print">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col border border-slate-100">
+                                    <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50/80">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="font-extrabold text-2xl text-slate-800">{reportModal.title}</h3>
+                                            {user.role === 'admin' && (
+                                                <button onClick={() => executeReportPrint(reportModal.title, reportModal.data, reportModal.type)}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition">
+                                                    🖨️ طباعة / PDF
+                                                </button>
+                                            )}
+                                        </div>
+                                        <button onClick={() => setReportModal({ isOpen: false, title: '', data: [], type: '' })}
+                                            className="text-slate-400 hover:text-slate-600 bg-slate-200 hover:bg-slate-300 w-10 h-10 rounded-full flex justify-center items-center text-lg font-bold">✕</button>
+                                    </div>
+                                    <div className="p-6 overflow-y-auto">
+                                        {reportModal.data.length === 0 ? (
+                                            <p className="text-center text-slate-400 py-10 font-bold">لا توجد حركات مسجلة لهذا القسم</p>
+                                        ) : (
+                                            <table className="w-full text-center border-collapse text-sm">
+                                                <thead className="bg-slate-900 text-white font-bold">
+                                                    <tr>
+                                                        <th className="p-3.5">م</th>
+                                                        <th className="p-3.5">التاريخ</th>
+                                                        <th className="p-3.5">الصنف</th>
+                                                        <th className="p-3.5">العيار</th>
+                                                        {reportModal.type === 'operation' && (<><th className="p-3.5">العدد المتاح</th><th className="p-3.5">الوزن المتاح</th></>)}
+                                                        {reportModal.type === 'operationalBroken' && (<><th className="p-3.5">كسر تشغيل</th><th className="p-3.5">الوزن</th></>)}
+                                                        {reportModal.type === 'hallmark' && (<><th className="p-3.5">الدمغة</th><th className="p-3.5">الوزن</th></>)}
+                                                        {reportModal.type === 'packaging' && (<><th className="p-3.5">التغليف</th><th className="p-3.5">الوزن</th></>)}
+                                                        {reportModal.type === 'broken' && (<><th className="p-3.5">كسر دمغة</th><th className="p-3.5">الوزن</th></>)}
+                                                        {reportModal.type === 'barcode' && (<><th className="p-3.5">الباركود</th><th className="p-3.5">الوزن</th></>)}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-200 font-semibold">
+                                                    {reportModal.data.map((r, i) => {
+                                                        const total = r.count || 0;
+                                                        const opBroken = r.operationalBrokenCount || 0;
+                                                        const hallmark = r.hallmarkCount || 0;
+                                                        const packaging = r.packagingCount || 0;
+                                                        const broken = r.brokenCount || 0;
+                                                        const barcode = r.barcodeCount || 0;
+                                                        const available = total - opBroken - hallmark - packaging - broken - barcode;
+                                                        return (
+                                                            <tr key={i} className="hover:bg-slate-50">
+                                                                <td className="p-3.5">{i+1}</td>
+                                                                <td className="p-3.5 text-slate-500 font-mono text-xs">{r.date}</td>
+                                                                <td className="p-3.5 font-bold">{r.item} {r.unitWeight} ج</td>
+                                                                <td className="p-3.5">عيار {r.karat}</td>
+                                                                {reportModal.type === 'operation' && (<><td className="p-3.5 font-bold">{available}</td><td className="p-3.5 font-bold">{(available * r.unitWeight).toFixed(2)}ج</td></>)}
+                                                                {reportModal.type === 'operationalBroken' && (<><td className="p-3.5 font-bold text-orange-700">{opBroken}</td><td className="p-3.5 font-bold text-orange-700">{(opBroken * r.unitWeight).toFixed(2)}ج</td></>)}
+                                                                {reportModal.type === 'hallmark' && (<><td className="p-3.5 font-bold text-blue-700">{hallmark}</td><td className="p-3.5 font-bold text-blue-700">{(hallmark * r.unitWeight).toFixed(2)}ج</td></>)}
+                                                                {reportModal.type === 'packaging' && (<><td className="p-3.5 font-bold text-emerald-700">{packaging}</td><td className="p-3.5 font-bold text-emerald-700">{(packaging * r.unitWeight).toFixed(2)}ج</td></>)}
+                                                                {reportModal.type === 'broken' && (<><td className="p-3.5 font-bold text-red-700">{broken}</td><td className="p-3.5 font-bold text-red-700">{(broken * r.unitWeight).toFixed(2)}ج</td></>)}
+                                                                {reportModal.type === 'barcode' && (<><td className="p-3.5 font-bold text-purple-700">{barcode}</td><td className="p-3.5 font-bold text-purple-700">{(barcode * r.unitWeight).toFixed(2)}ج</td></>)}
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ========== نافذة الجرد ========== */}
+                        {inventoryModal && (
+                            <div className="fullscreen-modal no-print">
+                                <div className="modal-header">
+                                    <h2 className="text-2xl font-extrabold text-slate-800">📋 تقرير الجرد </h2>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => { setInventoryModal(false); resetInventoryForm(); }}
+                                            className="text-slate-400 hover:text-slate-600 bg-slate-200 hover:bg-slate-300 w-10 h-10 rounded-full flex justify-center items-center text-xl font-bold">✕</button>
+                                    </div>
+                                </div>
+
+                                <div onClick={openInventoryDetailPage} className="summary-card border-amber center-card">
+                                    <div className="card-title">إجمالي الجرد حسب العيار</div>
+                                    <div className="karat-row karat-row-24">
+                                        <span className="karat-label">عيار 24</span>
+                                        <span className="karat-value">{inventoryStats.totalWeight24.toFixed(2)} ج</span>
+                                    </div>
+                                    <div className="karat-row karat-row-21">
+                                        <span className="karat-label">عيار 21</span>
+                                        <span className="karat-value">{inventoryStats.totalWeight21.toFixed(2)} ج</span>
+                                    </div>
+                                    <div className="mt-2 text-xs text-slate-400 font-bold text-center">اضغط لعرض التفاصيل الكاملة والطباعة</div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-wrap items-end gap-4 mt-6">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">من تاريخ</label>
+                                        <input type="date" value={invFilterFrom} onChange={e => setInvFilterFrom(e.target.value)}
+                                            className="p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:border-blue-600 text-sm font-semibold shadow-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">إلى تاريخ</label>
+                                        <input type="date" value={invFilterTo} onChange={e => setInvFilterTo(e.target.value)}
+                                            className="p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:border-blue-600 text-sm font-semibold shadow-sm" />
+                                    </div>
+                                    <button onClick={() => { setInvFilterFrom(''); setInvFilterTo(''); }}
+                                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold border border-slate-300">
+                                        إلغاء الفلتر
+                                    </button>
+                                </div>
+
+                                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 mb-8">
+                                    <h3 className="text-xl font-extrabold text-slate-800 mb-6 border-b pb-4">
+                                        {isEditingInventory ? 'تعديل سجل جرد' : 'إضافة سجل جرد جديد'}
+                                    </h3>
+                                    <form onSubmit={handleInventorySubmit} className="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">الصنف</label>
+                                            <input type="text" value={inventoryForm.item} onChange={e => handleInventoryItemChange(e.target.value)}
+                                                placeholder="اكتب اسم الصنف"
+                                                className="w-full p-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 font-bold text-center shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1.5">العيار</label>
+                                            <select value={inventoryForm.karat} onChange={e => setInventoryForm({ ...inventoryForm, karat: e.target.value })}
+                                                className="w-full p-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 font-bold shadow-sm">
+                                                <option value="24">24</option>
+                                                <option value="21">21</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">الوزن (ج)</label>
+                                            <input type="number" step="0.01" min="0.01" value={inventoryForm.weight} onChange={e => setInventoryForm({ ...inventoryForm, weight: e.target.value })}
+                                                placeholder="أدخل الوزن الإجمالي"
+                                                className="w-full p-3 border border-slate-300 rounded-2xl focus:outline-none focus:border-blue-600 text-center font-bold shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <button type="submit"
+                                                className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-3.5 rounded-2xl shadow-md w-full text-base">
+                                                {isEditingInventory ? 'تحديث السجل' : 'حفظ الجرد'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                    {isEditingInventory && (
+                                        <div className="mt-4 text-right">
+                                            <button onClick={resetInventoryForm} className="text-xs text-slate-500 hover:text-slate-800 underline font-bold">
+                                                إلغاء التعديل
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-slate-200">
+                                    <div className="p-5 border-b border-slate-200 bg-slate-50/80">
+                                        <h3 className="text-xl font-extrabold text-slate-800">سجل الجرد</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        {filteredInventory.length === 0 ? (
+                                            <p className="text-center text-slate-400 py-10 font-bold">لا توجد جردات مسجلة</p>
+                                        ) : (
+                                            <table className="w-full text-center border-collapse text-sm">
+                                                <thead className="bg-slate-900 text-white font-bold">
+                                                    <tr>
+                                                        <th className="p-3.5">التاريخ</th>
+                                                        <th className="p-3.5">الصنف</th>
+                                                        <th className="p-3.5">العيار</th>
+                                                        <th className="p-3.5">الوزن (ج)</th>
+                                                        <th className="p-3.5 no-print">إجراءات</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-200 font-semibold">
+                                                    {filteredInventory.map((inv) => {
+                                                        let w = parseFloat(inv.totalWeight);
+                                                        if (isNaN(w) || w === 0) {
+                                                            w = (parseFloat(inv.unitWeight) || 0) * (parseInt(inv.count) || 0);
+                                                        }
+                                                        return (
+                                                            <tr key={inv.docId} className="hover:bg-slate-50">
+                                                                <td className="p-3.5 text-slate-500 font-mono text-xs">{inv.date}</td>
+                                                                <td className="p-3.5 font-bold">{inv.item}</td>
+                                                                <td className="p-3.5">
+                                                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${inv.karat === '24' ? 'bg-amber-100 text-amber-900' : 'bg-yellow-100 text-yellow-900'}`}>
+                                                                        عيار {inv.karat}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-3.5 font-extrabold text-purple-900">{w.toFixed(2)} ج</td>
+                                                                <td className="p-3.5 no-print">
+                                                                    <div className="flex justify-center gap-2">
+                                                                        <button onClick={() => handleEditInventory(inv)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm">تعديل</button>
+                                                                        <button onClick={() => handleDeleteInventory(inv.docId)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm">حذف</button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ========== صفحة تفاصيل الجرد ========== */}
+                        {inventoryDetailPage && (
+                            <div className="fullscreen-modal no-print">
+                                <div className="modal-header">
+                                    <h2 className="text-2xl font-extrabold text-slate-800">📊 تفاصيل الجرد حسب العيار</h2>
+                                    <div className="flex gap-2">
+                                        <button onClick={executeInventoryDetailPrint}
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition">
+                                            🖨️ طباعة / PDF
+                                        </button>
+                                        <button onClick={() => setInventoryDetailPage(false)}
+                                            className="text-slate-400 hover:text-slate-600 bg-slate-200 hover:bg-slate-300 w-10 h-10 rounded-full flex justify-center items-center text-xl font-bold">✕</button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
+                                    <div className="summary-card border-indigo">
+                                        <div className="card-title">عيار 24</div>
+                                        <div className="karat-row karat-row-24">
+                                            <span className="karat-label">الإجمالي</span>
+                                            <span className="karat-value">{inventoryStats.totalWeight24.toFixed(2)} ج</span>
+                                        </div>
+                                    </div>
+                                    <div className="summary-card border-amber">
+                                        <div className="card-title">عيار 21</div>
+                                        <div className="karat-row karat-row-21">
+                                            <span className="karat-label">الإجمالي</span>
+                                            <span className="karat-value">{inventoryStats.totalWeight21.toFixed(2)} ج</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-slate-200">
+                                    <div className="p-5 border-b border-slate-200 bg-slate-50/80">
+                                        <h3 className="text-xl font-extrabold text-slate-800">قائمة الجردات التفصيلية</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        {filteredInventory.length === 0 ? (
+                                            <p className="text-center text-slate-400 py-10 font-bold">لا توجد جردات مسجلة</p>
+                                        ) : (
+                                            <table className="w-full text-center border-collapse text-sm">
+                                                <thead className="bg-slate-900 text-white font-bold">
+                                                    <tr>
+                                                        <th className="p-3.5">م</th>
+                                                        <th className="p-3.5">التاريخ</th>
+                                                        <th className="p-3.5">الصنف</th>
+                                                        <th className="p-3.5">العيار</th>
+                                                        <th className="p-3.5">الوزن (ج)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-200 font-semibold">
+                                                    {filteredInventory.map((r, i) => {
+                                                        let w = parseFloat(r.totalWeight);
+                                                        if (isNaN(w) || w === 0) {
+                                                            w = (parseFloat(r.unitWeight) || 0) * (parseInt(r.count) || 0);
+                                                        }
+                                                        return (
+                                                            <tr key={i} className="hover:bg-slate-50">
+                                                                <td className="p-3.5">{i+1}</td>
+                                                                <td className="p-3.5 text-slate-500 font-mono text-xs">{r.date}</td>
+                                                                <td className="p-3.5 font-bold">{r.item}</td>
+                                                                <td className="p-3.5">
+                                                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${r.karat === '24' ? 'bg-amber-100 text-amber-900' : 'bg-yellow-100 text-yellow-900'}`}>
+                                                                        عيار {r.karat}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-3.5 font-extrabold text-purple-900">{w.toFixed(2)} ج</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* الفوتر */}
+                    <footer className="mt-14 py-8 border-t border-slate-200 bg-white rounded-3xl shadow-sm text-center no-print">
+                        <p className="text-sm font-extrabold text-slate-800">نظام متابعة الإنتاج</p>
+                        <p className="text-xs font-bold text-slate-600 mt-1.5">إعداد وتصميم م/ أحمد مسلم</p>
+                        <p className="text-xs font-semibold text-slate-500 mt-1" dir="ltr">Ahmed.Musalam@newegygold.com - 01201816294</p>
+                    </footer>
+
                 </div>
             );
         }
